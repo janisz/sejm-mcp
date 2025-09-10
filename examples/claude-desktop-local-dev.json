@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "sejm-mcp": {
+      "command": "go",
+      "args": [
+        "run",
+        "./cmd/sejm-mcp"
+      ],
+      "cwd": "/home/janisz/go/src/github.com/janisz/sejm-mcp",
+      "env": {}
+    }
+  }
+}
