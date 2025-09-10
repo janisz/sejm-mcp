@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "sejm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "--interactive",
+        "--stdin-open",
+        "sejm-mcp:latest"
+      ],
+      "env": {}
+    }
+  }
+}

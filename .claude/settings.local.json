@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.sejm.gov.pl)",
+      "WebFetch(domain:api.sejm.gov.pl)",
+      "WebFetch(domain:api.sejm.gov.pl)",
+      "WebFetch(domain:api.sejm.gov.pl)",
+      "Bash(mkdir:*)",
+      "Bash(go mod:*)",
+      "Bash(curl:*)",
+      "Bash(oapi-codegen:*)",
+      "Bash(go build:*)",
+      "Bash(make test-unit:*)",
+      "Bash(go doc:*)",
+      "Bash(make test:*)",
+      "Bash(make check-apis:*)",
+      "Bash(make:*)",
+      "Bash(golangci-lint:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "enabledMcpjsonServers": [
+    "sejm-mcp"
+  ],
+  "enableAllProjectMcpServers": true
+}

@@ -1,0 +1,4 @@
+package: eli
+output: pkg/eli/types.go
+generate:
+  models: true

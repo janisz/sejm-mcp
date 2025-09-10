@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "sejm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "ghcr.io/janisz/sejm-mcp:latest"
+      ],
+      "description": "Polish Parliament and Legal Documents API access"
+    }
+  }
+}

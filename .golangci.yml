@@ -1,0 +1,29 @@
+# Minimal golangci-lint configuration for v2.4.0 compatibility
+version: "2"
+
+run:
+  timeout: 5m
+  tests: false
+
+linters:
+  enable:
+    - gosec
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - unconvert
+    - misspell
+    - nolintlint
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - nilerr
+    - nilnil
+    - makezero
+    - errcheck
+    - errorlint
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

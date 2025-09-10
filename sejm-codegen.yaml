@@ -1,0 +1,6 @@
+package: sejm
+output: pkg/sejm/types.go
+generate:
+  models: true
+compatibility:
+  always-prefix-enum-values: true
