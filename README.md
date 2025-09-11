@@ -50,6 +50,116 @@ go build -o sejm-mcp ./cmd/sejm-mcp
 
 The server implements the Model Context Protocol and can be integrated with any MCP-compatible client (Claude Desktop, VS Code extensions, etc.).
 
+#### Docker Usage (Recommended)
+
+The easiest way to use the server is with Docker:
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/janisz/sejm-mcp:latest
+
+# Run the server
+docker run --rm -i ghcr.io/janisz/sejm-mcp:latest
+```
+
+#### MCP Configuration
+
+Add this configuration to your `.mcp.json` or MCP client configuration:
+
+```json
+{
+  "servers": {
+    "sejm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "ghcr.io/janisz/sejm-mcp:latest"
+      ],
+      "description": "Polish Parliament and Legal Documents API access"
+    }
+  }
+}
+```
+
+#### Claude Desktop Configuration
+
+For Claude Desktop, add to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "sejm-mcp": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "ghcr.io/janisz/sejm-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
+#### Local Binary Usage
+
+If you prefer to build and run locally:
+
+```bash
+# Build from source
+go build -o sejm-mcp ./cmd/sejm-mcp
+
+# Add to your MCP configuration
+{
+  "servers": {
+    "sejm-mcp": {
+      "command": "./sejm-mcp",
+      "description": "Polish Parliament and Legal Documents API access"
+    }
+  }
+}
+```
+
+#### Advanced: HTTP and SSE Transport
+
+For advanced use cases, the server also supports HTTP and Server-Sent Events (SSE) transport methods:
+
+```bash
+# Run with HTTP transport
+./sejm-mcp --transport http --port 8080
+
+# Run with SSE transport
+./sejm-mcp --transport sse --port 8080
+```
+
+**HTTP Transport Configuration:**
+```json
+{
+  "servers": {
+    "sejm-mcp": {
+      "url": "http://localhost:8080/mcp",
+      "description": "Polish Parliament API via HTTP"
+    }
+  }
+}
+```
+
+**SSE Transport Configuration:**
+```json
+{
+  "servers": {
+    "sejm-mcp": {
+      "url": "http://localhost:8080/sse",
+      "description": "Polish Parliament API via SSE"
+    }
+  }
+}
+```
+
+> **Note:** HTTP and SSE transports are advanced features primarily useful for web integrations or debugging. The default stdio transport is recommended for most MCP clients.
+
 ## Tool Documentation
 
 ### Sejm API Tools

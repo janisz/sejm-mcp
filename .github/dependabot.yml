@@ -64,3 +64,25 @@ updates:
           - "major"
           - "minor"
           - "patch"
+
+  # Docker dependency management
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    target-branch: "main"
+    commit-message:
+      prefix: "docker"
+      prefix-development: "docker"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "docker"
+    reviewers:
+      - "janisz"
+    assignees:
+      - "janisz"
