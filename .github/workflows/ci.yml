@@ -25,16 +25,6 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
 
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Download dependencies
-      run: go mod download
 
     - name: Run unit tests
       if: matrix.test-type == 'unit'
@@ -60,16 +50,6 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
 
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Download dependencies
-      run: go mod download
 
     - name: Run tests with coverage
       run: |
@@ -111,16 +91,6 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
 
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Download dependencies
-      run: go mod download
 
     - name: Build binary
       run: make build
@@ -196,16 +166,6 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
 
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
-    - name: Download dependencies
-      run: go mod download
 
     - name: Install govulncheck
       run: go install golang.org/x/vuln/cmd/govulncheck@latest
