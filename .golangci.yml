@@ -1,235 +1,29 @@
-version: 2
+# Minimal golangci-lint configuration for v2.4.0 compatibility
+version: "2"
 
 run:
   timeout: 5m
-  issues-exit-code: 1
   tests: false
-  modules-download-mode: readonly
-
-output:
-  formats:
-    colored-line-number:
-      path: stdout
-  print-issued-lines: true
-  print-linter-name: true
-  uniq-by-line: true
-  sort-results: true
-
-linters-settings:
-  revive:
-    min-confidence: 0.8
-
-  cyclop:
-    max-complexity: 30
-
-  gocognit:
-    min-complexity: 200
-
-  goconst:
-    min-len: 2
-    min-occurrences: 3
-
-  gosec:
-    includes:
-      - G401 # Use of weak cryptographic primitive
-      - G501 # Import blocklist: crypto/md5
-      - G502 # Import blocklist: crypto/des
-      - G503 # Import blocklist: crypto/rc4
-      - G504 # Import blocklist: net/http/cgi
-      - G505 # Import blocklist: crypto/sha1
-    excludes:
-      - G114 # Use of net/http serve function that has no support for setting timeouts
-    config:
-      G306: "0644"
-
-  goimports:
-    local-prefixes: github.com/janisz/sejm-mcp
-
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment # Too strict for this project
-
-  staticcheck:
-    go: "1.23"
-    checks: [ "all" ]
-
-  unused:
-    go: "1.23"
-
-  misspell:
-    locale: US
-    ignore-words:
-      - sejm
-      - konstytucja
-      - prawo
-      - ustawa
-      - rozporządzenie
-      - posel
-      - sejmu
-      - interpelacja
-      - głosowanie
-      - cancelled
-      - canceled
-      - ministr
-      - ministrów
-      - ministerstwo
-
-  dupl:
-    threshold: 150
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport # https://github.com/go-critic/go-critic/issues/845
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - importShadow # not important for this project
 
 linters:
-  disable-all: true
   enable:
-    # Security
-    - gosec           # Security issues
-
-    # Code quality
-    - govet           # Reports suspicious constructs
-    - staticcheck     # Advanced Go linter
-    - unused          # Checks for unused constants, variables, functions and types
-    - ineffassign     # Detects ineffectual assignments
-    - unconvert       # Unnecessary type conversions
-
-
-    # Performance
-
-    # Style
-    - misspell        # Misspelled English words in comments
-    - nolintlint      # Ill-formed or insufficient nolint directives
-
-    # Bugs
-    - bodyclose       # Check HTTP response body is closed
-    - rowserrcheck    # Check whether Err of rows is checked
-    - sqlclosecheck   # Check sql.Rows and sql.Stmt are closed
-    - nilerr          # Check that there is no simultaneous return of nil error and invalid value
-    - nilnil          # Check that there is no simultaneous return of nil error and nil value
-    - makezero        # Find slice declarations with non-zero initial length
-
-    # Error handling
-    - errcheck        # Check for unchecked errors
-    - errorlint       # Go source code linter for error wrapping
+    - gosec
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - unconvert
+    - misspell
+    - nolintlint
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - nilerr
+    - nilnil
+    - makezero
+    - errcheck
+    - errorlint
 
 issues:
-  # List of regexps of issue texts to exclude, empty list by default.
-  exclude:
-    # EXC0001 errcheck: Almost all programs ignore errors on these functions and in most cases it's ok
-    - "Error return value of .((os\\.)?std(out|err)\\..*|print(ln)?|log\\.|t\\.Log|fmt\\.(Print|Fprint)(f|ln)?|\\.(Flush|Close)).*is not checked"
-    # EXC0003 revive: False positive when tests are defined in package 'test'
-    - "func name will be used as test\\.Test.* by other packages, and that stutters; consider calling this"
-    # EXC0004 govet: Common false positives
-    - "(possible misuse of unsafe.Pointer|should have signature)"
-    # EXC0005 staticcheck: Developers tend to write in C-style with an explicit 'break' in a 'switch', so it's ok to ignore
-    - "ineffective break statement. Did you mean to break out of the outer loop"
-    # EXC0011 stylecheck: Too many false positives: https://github.com/mvdan/unparam/issues/8
-    - "always receives"
-
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - errcheck
-        - dupl
-        - gosec
-        - goconst
-        - staticcheck
-        - gocognit
-        - cyclop
-        - wrapcheck
-        - revive
-        - gocritic
-        - prealloc
-
-    # Exclude some staticcheck messages
-    - linters:
-        - staticcheck
-      text: "SA9003:"
-
-    # Exclude lll issues for long lines with go:generate
-    - linters:
-        - lll
-      source: "^//go:generate "
-
-    # Ignore certain gosec rules in test files
-    - path: _test\.go
-      text: "G404:"  # Use of weak random number generator
-      linters:
-        - gosec
-
-    # Allow complex functions in generated files
-    - path: "pkg/(sejm|eli)/"
-      linters:
-        - cyclop
-        - gocognit
-        - gocyclo
-        - dupl
-        - goconst
-        - unparam
-        - staticcheck
-
-    # Allow complex functions in handler methods (auto-generated API handlers)
-    - path: "internal/server/"
-      linters:
-        - cyclop
-        - gocognit
-        - dupl
-        - staticcheck
-        - errcheck
-        - wrapcheck
-        - revive
-        - gocritic
-
-    # Disable wrapcheck for pkg files (JSON marshaling errors don't need wrapping)
-    - path: "pkg/"
-      linters:
-        - wrapcheck
-
-    # Relax some rules for integration tests
-    - path: "test/integration/"
-      linters:
-        - gocyclo
-        - cyclop
-        - gocognit
-        - depguard
-        - gocritic
-
-    # Allow duplication in similar ELI handler functions and long lines in tool descriptions
-    - path: "internal/server/eli_tools.go"
-      linters:
-        - dupl
-        - lll
-      text: "lines are duplicate of"
-
-    # Allow duplication in main.go for help text
-    - path: "cmd/sejm-mcp/main.go"
-      linters:
-        - dupl
-        - lll
-
-  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
   max-issues-per-linter: 0
-
-  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
   max-same-issues: 0
-
-  # Show only new issues: if there are unstaged changes or untracked files, only those changes are analyzed
-  new: false
-
-  # Fix found issues (if it's supported by the linter)
-  fix: false
