@@ -47,7 +47,8 @@
       "mcp__mcp-sejm__eli_get_acts_by_publisher",
       "mcp__mcp-sejm__eli_get_acts_by_year",
       "mcp__mcp-sejm__eli_get_act_references",
-      "mcp__mcp-sejm__eli_search_act_content"
+      "mcp__mcp-sejm__eli_search_act_content",
+      "Bash(golangci-lint:*)"
     ],
     "deny": [],
     "ask": []

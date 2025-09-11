@@ -192,8 +192,8 @@ func TestCustomTimeParsingPriority(t *testing.T) {
 	}
 
 	expected := time.Date(2023, 12, 28, 22, 0, 40, 0, time.UTC)
-	if !customTime.Time.Equal(expected) {
-		t.Errorf("Expected %v, got %v", expected, customTime.Time)
+	if !customTime.Equal(expected) {
+		t.Errorf("Expected %v, got %v", expected, customTime)
 	}
 }
 
@@ -308,8 +308,8 @@ func TestCustomTimeStructUsage(t *testing.T) {
 	}
 
 	expectedTime := time.Date(2023, 12, 28, 22, 0, 40, 0, time.UTC)
-	if !testStruct.Time.Time.Equal(expectedTime) {
-		t.Errorf("Expected time %v, got %v", expectedTime, testStruct.Time.Time)
+	if !testStruct.Time.Equal(expectedTime) {
+		t.Errorf("Expected time %v, got %v", expectedTime, testStruct.Time)
 	}
 
 	// Test marshaling

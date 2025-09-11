@@ -1,3 +1,4 @@
+// Package server implements ELI (Polish Legal Information System) API handlers for the sejm-mcp server.
 package server
 
 import (
@@ -16,16 +17,6 @@ import (
 )
 
 const eliBaseURL = "https://api.sejm.gov.pl/eli"
-
-// Static reference data from ELI API endpoints (rarely change, safe to hardcode)
-var eliReferenceTypes = []string{
-	"Akty wykonawcze z art.", "Nowelizacje po tekście jednolitym", "Orzeczenie TK",
-	"Akty wykonawcze", "Odesłania", "Sprostowanie", "Tekst jednolity dla aktu",
-	"Uchylenia wynikające z", "Akty uznane za uchylone", "Przepisy wprowadzane",
-	"Podstawa prawna", "Podstawa prawna z art.", "Orzeczenie TK dla aktu",
-	"Akty zmieniające", "Akty zmienione", "Akty uchylone", "Przepisy wprowadzające",
-	"Akty uchylające", "Inf. o tekście jednolitym", "Sprostowanie dla aktów",
-}
 
 var eliLegalStatuses = []string{
 	"akt indywidualny", "akt jednorazowy", "akt objęty tekstem jednolitym",
@@ -99,8 +90,8 @@ func (sr StandardResponse) Format() string {
 
 // buildCrossReferenceHints analyzes search results and suggests related navigation
 func buildCrossReferenceHints(acts []eli.Act, baseActions []string) []string {
-	actions := make([]string, len(baseActions))
-	copy(actions, baseActions)
+	actions := make([]string, 0, len(baseActions)+10) // Reserve capacity for base + additional actions
+	actions = append(actions, baseActions...)
 
 	// Analyze the types of acts found and suggest related searches
 	hasConstitution := false
@@ -151,11 +142,8 @@ func buildCrossReferenceHints(acts []eli.Act, baseActions []string) []string {
 	return actions
 }
 
-// buildPaginationHints creates pagination guidance based on current offset, limit and total results
-func buildPaginationHints(offset, limit string, totalCount int) []string {
-	var hints []string
-
-	// Parse offset and limit
+// parseOffsetLimit parses offset and limit strings into integers with defaults
+func parseOffsetLimit(offset, limit string) (int, int) {
 	offsetInt := 0
 	if offset != "" {
 		if parsed, err := strconv.Atoi(offset); err == nil {
@@ -169,6 +157,13 @@ func buildPaginationHints(offset, limit string, totalCount int) []string {
 			limitInt = parsed
 		}
 	}
+	return offsetInt, limitInt
+}
+
+// buildPaginationHints creates pagination guidance based on current offset, limit and total results
+func buildPaginationHints(offset, limit string, totalCount int) []string {
+	var hints []string
+	offsetInt, limitInt := parseOffsetLimit(offset, limit)
 
 	// Calculate current page info
 	currentEnd := offsetInt + limitInt
@@ -863,7 +858,7 @@ func (s *SejmServer) handleGetActDetails(ctx context.Context, request mcp.CallTo
 		summary = append(summary, fmt.Sprintf("Type: %s", *act.Type))
 	}
 	if act.InForce != nil {
-		status := "Unknown"
+		var status string
 		switch *act.InForce {
 		case "IN_FORCE":
 			status = "✓ In force"
@@ -1035,7 +1030,8 @@ func (s *SejmServer) handleGetActText(ctx context.Context, request mcp.CallToolR
 		slog.Bool("htmlAvailable", htmlAvailable),
 		slog.Bool("pdfAvailable", pdfAvailable))
 
-	if format == "text" {
+	switch format {
+	case "text":
 		// For text format, handle pagination first, then choose the best available format
 		if showPageInfo == "true" || pageStr != "" || pagesPerChunkStr != "" {
 			// Pagination requested - must use PDF for page-level control
@@ -1080,11 +1076,11 @@ func (s *SejmServer) handleGetActText(ctx context.Context, request mcp.CallToolR
 				slog.String("position", position))
 			return mcp.NewToolResultError(fmt.Sprintf("No text formats available for legal act %s/%s/%s. This document does not have HTML or PDF text available for extraction.", publisher, year, position)), nil
 		}
-	} else if format == "pdf" {
+	case "pdf":
 		s.logger.Info("Using PDF format")
 		endpoint = fmt.Sprintf("%s/acts/%s/%s/%s/text.pdf", eliBaseURL, publisher, year, position)
 		requestFormat = "pdf"
-	} else {
+	default:
 		s.logger.Info("Using HTML format")
 		endpoint = fmt.Sprintf("%s/acts/%s/%s/%s/text.html", eliBaseURL, publisher, year, position)
 		requestFormat = "html"
@@ -1303,7 +1299,7 @@ func (s *SejmServer) handleGetActReferences(ctx context.Context, request mcp.Cal
 	return mcp.NewToolResultText(response.Format()), nil
 }
 
-func (s *SejmServer) handleGetPublishers(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *SejmServer) handleGetPublishers(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	endpoint := fmt.Sprintf("%s/acts", eliBaseURL)
 	data, err := s.makeAPIRequest(ctx, endpoint, nil)
 	if err != nil {
@@ -1421,7 +1417,11 @@ func (s *SejmServer) handleSearchActContent(ctx context.Context, request mcp.Cal
 		s.logger.Error("Failed to parse PDF for content search", slog.Any("error", err))
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse PDF document: %v", err)), nil
 	}
-	defer doc.Close()
+	defer func() {
+		if err := doc.Close(); err != nil {
+			s.logger.Warn("Failed to close PDF document", slog.Any("error", err))
+		}
+	}()
 
 	pageCount := doc.NumPage()
 	s.logger.Info("PDF parsed for content search", slog.Int("totalPages", pageCount))
@@ -1634,7 +1634,11 @@ func (s *SejmServer) extractTextFromPDF(pdfData []byte) (string, error) {
 			slog.Any("error", err))
 		return "", fmt.Errorf("failed to parse PDF document (%d bytes): %w", len(pdfData), err)
 	}
-	defer doc.Close()
+	defer func() {
+		if err := doc.Close(); err != nil {
+			s.logger.Warn("Failed to close PDF document", slog.Any("error", err))
+		}
+	}()
 
 	pageCount := doc.NumPage()
 	s.logger.Info("PDF document parsed", slog.Int("pages", pageCount))
@@ -1721,7 +1725,11 @@ func (s *SejmServer) extractTextWithPagination(ctx context.Context, pdfData []by
 			slog.Any("error", err))
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse PDF document (%d bytes): %v", len(pdfData), err)), nil
 	}
-	defer doc.Close()
+	defer func() {
+		if err := doc.Close(); err != nil {
+			s.logger.Warn("Failed to close PDF document", slog.Any("error", err))
+		}
+	}()
 
 	pageCount := doc.NumPage()
 	s.logger.Info("PDF document parsed for pagination", slog.Int("totalPages", pageCount))
@@ -1757,13 +1765,13 @@ func (s *SejmServer) extractTextWithPagination(ctx context.Context, pdfData []by
 			},
 			Data: []string{
 				"Page Navigation Instructions:",
-				fmt.Sprintf("• Use page='1' to start from first page"),
+				"• Use page='1' to start from first page",
 				fmt.Sprintf("• Use pages_per_chunk='%d' to get %d pages at once (max: 20)", pagesPerChunk, pagesPerChunk),
 				fmt.Sprintf("• Page ranges: 1-%d available", pageCount),
 				"",
 				"Examples:",
-				fmt.Sprintf("• eli_get_act_text with page='1' and pages_per_chunk='3' (gets pages 1-3)"),
-				fmt.Sprintf("• eli_get_act_text with page='5' and pages_per_chunk='5' (gets pages 5-9)"),
+				"• eli_get_act_text with page='1' and pages_per_chunk='3' (gets pages 1-3)",
+				"• eli_get_act_text with page='5' and pages_per_chunk='5' (gets pages 5-9)",
 				fmt.Sprintf("• eli_get_act_text with page='%d' (gets last page)", pageCount),
 			},
 			NextActions: []string{
@@ -1933,7 +1941,11 @@ func (s *SejmServer) searchPDFContent(ctx context.Context, pdfData []byte, docum
 		s.logger.Error("Failed to parse PDF for content search", slog.Any("error", err))
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse PDF document: %v", err)), nil
 	}
-	defer doc.Close()
+	defer func() {
+		if err := doc.Close(); err != nil {
+			s.logger.Warn("Failed to close PDF document", slog.Any("error", err))
+		}
+	}()
 
 	pageCount := doc.NumPage()
 	s.logger.Info("PDF parsed for content search", slog.Int("totalPages", pageCount))
@@ -2443,7 +2455,7 @@ func (s *SejmServer) handleGetActsByPublisher(ctx context.Context, request mcp.C
 	results = append(results, fmt.Sprintf("Publisher '%s' Legal Output Analysis:", publisher))
 
 	if len(yearCount) > 0 {
-		results = append(results, fmt.Sprintf("\nYearly Distribution (top 5 years):"))
+		results = append(results, "\nYearly Distribution (top 5 years):")
 		years := make([]int, 0, len(yearCount))
 		for year := range yearCount {
 			years = append(years, year)
@@ -2459,7 +2471,7 @@ func (s *SejmServer) handleGetActsByPublisher(ctx context.Context, request mcp.C
 	}
 
 	// Show sample acts
-	results = append(results, fmt.Sprintf("\nSample Acts (first 10):"))
+	results = append(results, "\nSample Acts (first 10):")
 	for i, act := range searchResult.Items {
 		if i >= 10 {
 			break
@@ -2568,7 +2580,7 @@ func (s *SejmServer) handleGetActsByYear(ctx context.Context, request mcp.CallTo
 	}
 
 	// Show sample acts
-	results = append(results, fmt.Sprintf("\nSample Acts (first 10):"))
+	results = append(results, "\nSample Acts (first 10):")
 	for i, act := range acts {
 		if i >= 10 {
 			break

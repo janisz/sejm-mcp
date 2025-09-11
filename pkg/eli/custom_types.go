@@ -1,3 +1,4 @@
+// Package eli provides types and utilities for working with the Polish Legal Information System (ELI) API.
 package eli
 
 import (
@@ -58,7 +59,7 @@ func (ct *CustomTime) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements json.Marshaler for CustomTime
 func (ct CustomTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(ct.Time.Format(time.RFC3339))
+	return json.Marshal(ct.Format(time.RFC3339))
 }
 
 // CustomDate handles various date formats returned by ELI API
@@ -95,10 +96,10 @@ func (cd *CustomDate) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements json.Marshaler for CustomDate
 func (cd CustomDate) MarshalJSON() ([]byte, error) {
-	if cd.Time.IsZero() {
+	if cd.IsZero() {
 		return []byte("null"), nil
 	}
-	return json.Marshal(cd.Time.Format("2006-01-02"))
+	return json.Marshal(cd.Format("2006-01-02"))
 }
 
 // CustomReferenceDetailsInfo is a custom version of ReferenceDetailsInfo with proper date parsing

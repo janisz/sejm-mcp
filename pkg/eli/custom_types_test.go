@@ -73,12 +73,12 @@ func TestCustomTime_UnmarshalJSON(t *testing.T) {
 				return
 			}
 
-			if !tt.expected.IsZero() && !ct.Time.Equal(tt.expected) {
-				t.Errorf("Expected time %v, got %v for input %s", tt.expected, ct.Time, tt.input)
+			if !tt.expected.IsZero() && !ct.Equal(tt.expected) {
+				t.Errorf("Expected time %v, got %v for input %s", tt.expected, ct, tt.input)
 			}
 
-			if tt.expected.IsZero() && !ct.Time.IsZero() {
-				t.Errorf("Expected zero time, got %v for input %s", ct.Time, tt.input)
+			if tt.expected.IsZero() && !ct.IsZero() {
+				t.Errorf("Expected zero time, got %v for input %s", ct, tt.input)
 			}
 		})
 	}
@@ -151,12 +151,12 @@ func TestCustomDate_UnmarshalJSON(t *testing.T) {
 				return
 			}
 
-			if !tt.expected.IsZero() && !cd.Time.Equal(tt.expected) {
-				t.Errorf("Expected time %v, got %v for input %s", tt.expected, cd.Time, tt.input)
+			if !tt.expected.IsZero() && !cd.Equal(tt.expected) {
+				t.Errorf("Expected time %v, got %v for input %s", tt.expected, cd, tt.input)
 			}
 
-			if tt.expected.IsZero() && !cd.Time.IsZero() {
-				t.Errorf("Expected zero time, got %v for input %s", cd.Time, tt.input)
+			if tt.expected.IsZero() && !cd.IsZero() {
+				t.Errorf("Expected zero time, got %v for input %s", cd, tt.input)
 			}
 		})
 	}

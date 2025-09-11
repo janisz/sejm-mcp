@@ -1,3 +1,4 @@
+// Package common provides shared utilities and types used across the sejm-mcp application.
 package common
 
 import (
@@ -49,10 +50,10 @@ func (d *SejmDate) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements json.Marshaler for SejmDate
 func (d SejmDate) MarshalJSON() ([]byte, error) {
-	if d.Time.IsZero() {
+	if d.IsZero() {
 		return []byte("null"), nil
 	}
-	return json.Marshal(d.Time.Format("2006-01-02"))
+	return json.Marshal(d.Format("2006-01-02"))
 }
 
 // UnmarshalJSON implements json.Unmarshaler for SejmDateTime
@@ -84,8 +85,8 @@ func (dt *SejmDateTime) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements json.Marshaler for SejmDateTime
 func (dt SejmDateTime) MarshalJSON() ([]byte, error) {
-	if dt.Time.IsZero() {
+	if dt.IsZero() {
 		return []byte("null"), nil
 	}
-	return json.Marshal(dt.Time.Format("2006-01-02T15:04:05"))
+	return json.Marshal(dt.Format("2006-01-02T15:04:05"))
 }

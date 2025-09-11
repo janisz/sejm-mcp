@@ -1,3 +1,4 @@
+// Package sejm provides types and utilities for working with the Polish Parliament (Sejm) API.
 package sejm
 
 import (
@@ -44,5 +45,5 @@ func (ct *CustomTime) UnmarshalJSON(data []byte) error {
 
 // MarshalJSON implements json.Marshaler for CustomTime
 func (ct CustomTime) MarshalJSON() ([]byte, error) {
-	return json.Marshal(ct.Time.Format(time.RFC3339))
+	return json.Marshal(ct.Format(time.RFC3339))
 }

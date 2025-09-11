@@ -62,6 +62,7 @@ type Cache struct {
 	mu            sync.RWMutex
 }
 
+// SejmServer provides access to Polish Parliament and Legal Information System APIs through MCP protocol.
 type SejmServer struct {
 	server *server.MCPServer
 	client *http.Client
@@ -70,37 +71,6 @@ type SejmServer struct {
 	config Config
 }
 
-// responseWrapper wraps http.ResponseWriter to capture response details
-type responseWrapper struct {
-	http.ResponseWriter
-	logger       *slog.Logger
-	debugMode    bool
-	statusCode   int
-	bytesWritten int
-}
-
-func (rw *responseWrapper) WriteHeader(statusCode int) {
-	rw.statusCode = statusCode
-	rw.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (rw *responseWrapper) Write(data []byte) (int, error) {
-	if rw.statusCode == 0 {
-		rw.statusCode = 200
-	}
-
-	n, err := rw.ResponseWriter.Write(data)
-	rw.bytesWritten += n
-
-	// Log response body in debug mode (truncated for large responses)
-	if rw.debugMode && len(data) < 1000 {
-		rw.logger.Debug("MCP response body", slog.String("body", string(data)))
-	} else if rw.debugMode {
-		rw.logger.Debug("MCP response body", slog.String("body", string(data[:500])+"... (truncated)"))
-	}
-
-	return n, err
-}
 
 // LRUTTLCache implements httpcache.Cache using hashicorp's LRU with TTL
 type LRUTTLCache struct {
@@ -130,10 +100,12 @@ func (c *LRUTTLCache) Delete(key string) {
 	c.cache.Remove(key)
 }
 
+// NewSejmServer creates a new instance of SejmServer with default configuration.
 func NewSejmServer() *SejmServer {
 	return NewSejmServerWithConfig(Config{DebugMode: false})
 }
 
+// NewSejmServerWithConfig creates a new instance of SejmServer with custom configuration.
 func NewSejmServerWithConfig(config Config) *SejmServer {
 	// Create base HTTP transport with improved connection handling
 	baseTransport := &http.Transport{
@@ -152,7 +124,7 @@ func NewSejmServerWithConfig(config Config) *SejmServer {
 			return req.URL.String()
 		},
 		// Always authorize cache reading, ignoring server cache headers
-		AuthorizeCacheFn: func(req *http.Request, c *http.Client) bool {
+		AuthorizeCacheFn: func(_ *http.Request, _ *http.Client) bool {
 			return true
 		},
 	})
@@ -205,11 +177,13 @@ func NewSejmServerWithConfig(config Config) *SejmServer {
 	return s
 }
 
+// RunStdio starts the server in stdio mode for MCP client communication.
 func (s *SejmServer) RunStdio() error {
 	s.logger.Debug("Starting server in stdio mode")
 	return server.ServeStdio(s.server)
 }
 
+// RunSSE starts the server in SSE mode with real-time streaming capabilities.
 func (s *SejmServer) RunSSE(addr string) error {
 	s.logger.Info("Starting server in SSE mode", slog.String("address", addr))
 
@@ -228,7 +202,9 @@ func (s *SejmServer) RunSSE(addr string) error {
 		s.logger.Debug("Health check request received", slog.String("method", r.Method), slog.String("path", r.URL.Path))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy","service":"sejm-mcp","version":"1.0.0"}`))
+		if _, err := w.Write([]byte(`{"status":"healthy","service":"sejm-mcp","version":"1.0.0"}`)); err != nil {
+			s.logger.Warn("Failed to write health check response", slog.Any("error", err))
+		}
 	})
 
 	// Add root endpoint for health checking
@@ -242,7 +218,9 @@ func (s *SejmServer) RunSSE(addr string) error {
 			"status":  "healthy",
 			"mcp":     "/mcp",
 		}
-		json.NewEncoder(w).Encode(rootResponse)
+		if err := json.NewEncoder(w).Encode(rootResponse); err != nil {
+			s.logger.Warn("Failed to encode root response", slog.Any("error", err))
+		}
 	})
 
 	// Add MCP health check endpoint
@@ -266,7 +244,9 @@ func (s *SejmServer) RunSSE(addr string) error {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(healthResponse)
+		if err := json.NewEncoder(w).Encode(healthResponse); err != nil {
+			s.logger.Warn("Failed to encode health response", slog.Any("error", err))
+		}
 	})
 
 	// Mount the SSE server on the MCP endpoint
@@ -306,12 +286,14 @@ func (s *SejmServer) RunSSE(addr string) error {
 
 	// Start the HTTP server with our custom mux and listener
 	httpServer := &http.Server{
-		Handler: mux,
+		Handler:           mux,
+		ReadHeaderTimeout: 30 * time.Second,
 	}
 
 	return httpServer.Serve(listener)
 }
 
+// RunHTTP starts the server in stateless HTTP mode for production deployment.
 func (s *SejmServer) RunHTTP(addr string) error {
 	s.logger.Info("Starting server in HTTP mode", slog.String("address", addr))
 
@@ -329,7 +311,9 @@ func (s *SejmServer) RunHTTP(addr string) error {
 		s.logger.Debug("Health check request received", slog.String("method", r.Method), slog.String("path", r.URL.Path))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status":"healthy","service":"sejm-mcp","version":"1.0.0"}`))
+		if _, err := w.Write([]byte(`{"status":"healthy","service":"sejm-mcp","version":"1.0.0"}`)); err != nil {
+			s.logger.Warn("Failed to write health check response", slog.Any("error", err))
+		}
 	})
 
 	// Add root endpoint for health checking
@@ -343,7 +327,9 @@ func (s *SejmServer) RunHTTP(addr string) error {
 			"status":  "healthy",
 			"mcp":     "/mcp",
 		}
-		json.NewEncoder(w).Encode(rootResponse)
+		if err := json.NewEncoder(w).Encode(rootResponse); err != nil {
+			s.logger.Warn("Failed to encode root response", slog.Any("error", err))
+		}
 	})
 
 	// Add MCP health check endpoint
@@ -367,7 +353,9 @@ func (s *SejmServer) RunHTTP(addr string) error {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(healthResponse)
+		if err := json.NewEncoder(w).Encode(healthResponse); err != nil {
+			s.logger.Warn("Failed to encode health response", slog.Any("error", err))
+		}
 	})
 
 	// Mount the HTTP server on the MCP endpoint
@@ -403,7 +391,8 @@ func (s *SejmServer) RunHTTP(addr string) error {
 
 	// Start the HTTP server with our custom mux and listener
 	srv := &http.Server{
-		Handler: mux,
+		Handler:           mux,
+		ReadHeaderTimeout: 30 * time.Second,
 	}
 
 	return srv.Serve(listener)
@@ -520,7 +509,9 @@ func (s *SejmServer) makeAPIRequestWithHeaders(ctx context.Context, endpoint str
 				slog.Int("status", resp.StatusCode),
 				slog.String("statusText", resp.Status),
 				slog.String("url", finalURL))
-			resp.Body.Close() // Close body for error cases
+			if err := resp.Body.Close(); err != nil {
+				s.logger.Warn("Failed to close response body", slog.Any("error", err))
+			}
 			// Enhanced error messages with specific status codes
 			switch resp.StatusCode {
 			case http.StatusNotFound:
@@ -564,7 +555,11 @@ func (s *SejmServer) makeAPIRequestWithHeaders(ctx context.Context, endpoint str
 		}
 
 		// Success! Process the response
-		defer resp.Body.Close()
+		defer func() {
+			if err := resp.Body.Close(); err != nil {
+				s.logger.Warn("Failed to close response body", slog.Any("error", err))
+			}
+		}()
 
 		// Update cache statistics
 		s.updateHTTPCacheStats(resp)
@@ -849,88 +844,8 @@ func (s *SejmServer) getSearchSuggestions(searchTitle string) []string {
 	return suggestions
 }
 
-// clearExpiredCache removes expired entries from cache
-func (s *SejmServer) clearExpiredCache() {
-	s.cache.mu.Lock()
-	defer s.cache.mu.Unlock()
 
-	now := time.Now()
 
-	if s.cache.Publishers != nil && now.After(s.cache.Publishers.ExpiresAt) {
-		s.cache.Publishers = nil
-	}
-
-	if s.cache.PopularActs != nil && now.After(s.cache.PopularActs.ExpiresAt) {
-		s.cache.PopularActs = nil
-	}
-
-	if s.cache.StatusTypes != nil && now.After(s.cache.StatusTypes.ExpiresAt) {
-		s.cache.StatusTypes = nil
-	}
-
-	if s.cache.DocumentTypes != nil && now.After(s.cache.DocumentTypes.ExpiresAt) {
-		s.cache.DocumentTypes = nil
-	}
-
-	if s.cache.Keywords != nil && now.After(s.cache.Keywords.ExpiresAt) {
-		s.cache.Keywords = nil
-	}
-
-	if s.cache.Institutions != nil && now.After(s.cache.Institutions.ExpiresAt) {
-		s.cache.Institutions = nil
-	}
-}
-
-// clearAllCache forcibly clears all cached data
-func (s *SejmServer) clearAllCache() {
-	s.cache.mu.Lock()
-	defer s.cache.mu.Unlock()
-
-	s.cache.Publishers = nil
-	s.cache.PopularActs = nil
-	s.cache.StatusTypes = nil
-	s.cache.DocumentTypes = nil
-	s.cache.Keywords = nil
-	s.cache.Institutions = nil
-}
-
-// getCachedStatusTypes returns status types from cache or builds them from known values
-func (s *SejmServer) getCachedStatusTypes() []string {
-	s.cache.mu.RLock()
-	if s.cache.StatusTypes != nil && time.Now().Before(s.cache.StatusTypes.ExpiresAt) {
-		statusTypes := s.cache.StatusTypes.Data.([]string)
-		s.cache.mu.RUnlock()
-		return statusTypes
-	}
-	s.cache.mu.RUnlock()
-
-	s.cache.mu.Lock()
-	defer s.cache.mu.Unlock()
-
-	// Double-check
-	if s.cache.StatusTypes != nil && time.Now().Before(s.cache.StatusTypes.ExpiresAt) {
-		return s.cache.StatusTypes.Data.([]string)
-	}
-
-	// Use complete legal statuses from ELI API (matches eli_tools.go eliLegalStatuses)
-	statusTypes := []string{
-		"akt indywidualny", "akt jednorazowy", "akt objęty tekstem jednolitym",
-		"akt posiada tekst jednolity", "bez statusu", "brak mocy prawnej",
-		"nieobowiązujący - przyczyna nieustalona", "nieobowiązujący - uchylona podstawa prawna",
-		"obowiązujący", "tekst jednolity dla aktu jednorazowego", "uchylony",
-		"uchylony wykazem", "uznany za uchylony", "wydane z naruszeniem prawa", "wygaśnięcie aktu",
-		// Also include simplified English equivalents for backwards compatibility
-		"IN_FORCE", "NOT_IN_FORCE", "UNKNOWN",
-	}
-
-	// Cache for 7 days (status types change rarely)
-	s.cache.StatusTypes = &CacheEntry{
-		Data:      statusTypes,
-		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
-	}
-
-	return statusTypes
-}
 
 // getCachedDocumentTypes returns document types from cache or builds them from legal system knowledge
 func (s *SejmServer) getCachedDocumentTypes() []string {
@@ -1031,66 +946,6 @@ func (s *SejmServer) getCachedKeywords() []string {
 	return keywords
 }
 
-// getCachedInstitutions returns frequently referenced institutions from cache or builds them
-func (s *SejmServer) getCachedInstitutions() []string {
-	s.cache.mu.RLock()
-	if s.cache.Institutions != nil && time.Now().Before(s.cache.Institutions.ExpiresAt) {
-		institutions := s.cache.Institutions.Data.([]string)
-		s.cache.mu.RUnlock()
-		return institutions
-	}
-	s.cache.mu.RUnlock()
-
-	s.cache.mu.Lock()
-	defer s.cache.mu.Unlock()
-
-	// Double-check
-	if s.cache.Institutions != nil && time.Now().Before(s.cache.Institutions.ExpiresAt) {
-		return s.cache.Institutions.Data.([]string)
-	}
-
-	// Build key Polish institutions from constitutional and legal system
-	institutions := []string{
-		// Constitutional institutions
-		"Sejm", "Senat", "Prezydent Rzeczypospolitej Polskiej",
-		"Rada Ministrów", "Prezes Rady Ministrów",
-
-		// Judicial institutions
-		"Trybunał Konstytucyjny", "Sąd Najwyższy",
-		"Naczelny Sąd Administracyjny", "Krajowa Rada Sądownictwa",
-		"Prokuratura Krajowa", "Prokurator Generalny",
-
-		// Control institutions
-		"Najwyższa Izba Kontroli", "Rzecznik Praw Obywatelskich",
-		"Rzecznik Praw Dziecka", "Rzecznik Małych i Średnich Przedsiębiorców",
-
-		// Administrative institutions
-		"Rada Ministrów", "Ministerstwo Sprawiedliwości",
-		"Ministerstwo Spraw Wewnętrznych i Administracji",
-		"Ministerstwo Finansów", "Ministerstwo Zdrowia",
-		"Ministerstwo Edukacji i Nauki", "Ministerstwo Kultury i Dziedzictwa Narodowego",
-
-		// Financial institutions
-		"Narodowy Bank Polski", "Komisja Nadzoru Finansowego",
-		"Bankowy Fundusz Gwarancyjny", "Rzecznik Finansowy",
-
-		// Self-government
-		"Wojewoda", "Sejmik Województwa", "Zarząd Województwa",
-		"Rada Gminy", "Wójt", "Burmistrz", "Prezydent Miasta",
-
-		// European institutions
-		"Komisja Europejska", "Parlament Europejski", "Rada Unii Europejskiej",
-		"Trybunał Sprawiedliwości Unii Europejskiej", "Europejski Trybunał Praw Człowieka",
-	}
-
-	// Cache for 30 days (institutional structure changes infrequently)
-	s.cache.Institutions = &CacheEntry{
-		Data:      institutions,
-		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
-	}
-
-	return institutions
-}
 
 // validateDocumentType checks if a document type is valid and suggests alternatives using fuzzy search
 func (s *SejmServer) validateDocumentType(docType string) (bool, []string, error) {
@@ -1233,194 +1088,8 @@ func (s *SejmServer) getKeywordContext(keyword string) string {
 	return ""
 }
 
-// validateInstitution checks if an institution name is recognized and suggests alternatives using fuzzy search
-func (s *SejmServer) validateInstitution(ctx context.Context, institutionName string) (bool, []string, error) {
-	if institutionName == "" {
-		return true, nil, nil // Empty is valid
-	}
 
-	institutions := s.getCachedInstitutions()
 
-	// Check exact match (case-insensitive)
-	for _, validInstitution := range institutions {
-		if strings.EqualFold(validInstitution, institutionName) {
-			return true, nil, nil
-		}
-	}
-
-	// Use fuzzy search to find similar institutions
-	fuzzyMatches := s.fuzzyMatchText(institutionName, institutions, 0.4)
-
-	if len(fuzzyMatches) > 0 {
-		suggestions := []string{"Did you mean:"}
-		for i, match := range fuzzyMatches {
-			if i >= 6 { // Limit to top 6 suggestions
-				break
-			}
-
-			// Add institution type context
-			institutionType := s.getInstitutionType(match.Text)
-			if institutionType != "" {
-				suggestions = append(suggestions, fmt.Sprintf("• %s (%s, %.0f%% match)", match.Text, institutionType, match.Score*100))
-			} else {
-				suggestions = append(suggestions, fmt.Sprintf("• %s (%.0f%% match)", match.Text, match.Score*100))
-			}
-		}
-		return false, suggestions, nil
-	}
-
-	// Institution not found, suggest major ones by category
-	var suggestions []string
-	suggestions = append(suggestions, "Major Polish institutions:")
-	suggestions = append(suggestions, "Legislative: Sejm, Senat")
-	suggestions = append(suggestions, "Executive: Prezydent Rzeczypospolitej Polskiej, Rada Ministrów")
-	suggestions = append(suggestions, "Judicial: Trybunał Konstytucyjny, Sąd Najwyższy, Naczelny Sąd Administracyjny")
-	suggestions = append(suggestions, "Control: Najwyższa Izba Kontroli, Rzecznik Praw Obywatelskich")
-
-	return false, suggestions, nil
-}
-
-// getInstitutionType returns the type/category of an institution
-func (s *SejmServer) getInstitutionType(institution string) string {
-	institutionLower := strings.ToLower(institution)
-
-	// Legislative institutions
-	if strings.Contains(institutionLower, "sejm") && !strings.Contains(institutionLower, "sejmik") {
-		return "parliament"
-	}
-	if strings.Contains(institutionLower, "senat") {
-		return "senate"
-	}
-
-	// Executive institutions
-	if strings.Contains(institutionLower, "prezydent") {
-		return "executive"
-	}
-	if strings.Contains(institutionLower, "rada ministrów") || strings.Contains(institutionLower, "ministerstwo") {
-		return "government"
-	}
-
-	// Judicial institutions
-	if strings.Contains(institutionLower, "trybunał") {
-		return "tribunal"
-	}
-	if strings.Contains(institutionLower, "sąd") {
-		return "court"
-	}
-	if strings.Contains(institutionLower, "prokuratura") {
-		return "prosecution"
-	}
-
-	// Control institutions
-	if strings.Contains(institutionLower, "najwyższa izba kontroli") || strings.Contains(institutionLower, "rzecznik") {
-		return "oversight"
-	}
-
-	// Financial institutions
-	if strings.Contains(institutionLower, "bank") || strings.Contains(institutionLower, "finansow") {
-		return "financial"
-	}
-
-	// Self-government
-	if strings.Contains(institutionLower, "wojewod") || strings.Contains(institutionLower, "gmina") ||
-		strings.Contains(institutionLower, "powiat") || strings.Contains(institutionLower, "sejmik") {
-		return "local government"
-	}
-
-	// European institutions
-	if strings.Contains(institutionLower, "europejsk") || strings.Contains(institutionLower, "unii europejskiej") {
-		return "European"
-	}
-
-	return ""
-}
-
-// getCacheStatus returns current cache status for debugging and monitoring
-func (s *SejmServer) getCacheStatus() map[string]interface{} {
-	s.cache.mu.RLock()
-	defer s.cache.mu.RUnlock()
-
-	status := make(map[string]interface{})
-	now := time.Now()
-
-	if s.cache.Publishers != nil {
-		status["publishers"] = map[string]interface{}{
-			"cached":  true,
-			"expires": s.cache.Publishers.ExpiresAt.Format("2006-01-02 15:04:05"),
-			"valid":   now.Before(s.cache.Publishers.ExpiresAt),
-		}
-	} else {
-		status["publishers"] = map[string]interface{}{"cached": false}
-	}
-
-	if s.cache.PopularActs != nil {
-		status["popularActs"] = map[string]interface{}{
-			"cached":  true,
-			"expires": s.cache.PopularActs.ExpiresAt.Format("2006-01-02 15:04:05"),
-			"valid":   now.Before(s.cache.PopularActs.ExpiresAt),
-		}
-	} else {
-		status["popularActs"] = map[string]interface{}{"cached": false}
-	}
-
-	if s.cache.StatusTypes != nil {
-		status["statusTypes"] = map[string]interface{}{
-			"cached":  true,
-			"expires": s.cache.StatusTypes.ExpiresAt.Format("2006-01-02 15:04:05"),
-			"valid":   now.Before(s.cache.StatusTypes.ExpiresAt),
-		}
-	} else {
-		status["statusTypes"] = map[string]interface{}{"cached": false}
-	}
-
-	if s.cache.DocumentTypes != nil {
-		status["documentTypes"] = map[string]interface{}{
-			"cached":  true,
-			"expires": s.cache.DocumentTypes.ExpiresAt.Format("2006-01-02 15:04:05"),
-			"valid":   now.Before(s.cache.DocumentTypes.ExpiresAt),
-		}
-	} else {
-		status["documentTypes"] = map[string]interface{}{"cached": false}
-	}
-
-	if s.cache.Keywords != nil {
-		status["keywords"] = map[string]interface{}{
-			"cached":  true,
-			"expires": s.cache.Keywords.ExpiresAt.Format("2006-01-02 15:04:05"),
-			"valid":   now.Before(s.cache.Keywords.ExpiresAt),
-		}
-	} else {
-		status["keywords"] = map[string]interface{}{"cached": false}
-	}
-
-	if s.cache.Institutions != nil {
-		status["institutions"] = map[string]interface{}{
-			"cached":  true,
-			"expires": s.cache.Institutions.ExpiresAt.Format("2006-01-02 15:04:05"),
-			"valid":   now.Before(s.cache.Institutions.ExpiresAt),
-		}
-	} else {
-		status["institutions"] = map[string]interface{}{"cached": false}
-	}
-
-	// Add HTTP cache statistics
-	httpStats := s.getHTTPCacheStats()
-	status["httpCache"] = map[string]interface{}{
-		"enabled":  true,
-		"requests": httpStats.Requests,
-		"hits":     httpStats.Hits,
-		"misses":   httpStats.Misses,
-		"hitRate": func() float64 {
-			if httpStats.Requests == 0 {
-				return 0.0
-			}
-			return float64(httpStats.Hits) / float64(httpStats.Requests) * 100
-		}(),
-		"lastCleanup": httpStats.LastCleanup.Format("2006-01-02 15:04:05"),
-	}
-
-	return status
-}
 
 // FuzzyMatch represents a fuzzy search result with similarity score
 type FuzzyMatch struct {
@@ -1481,19 +1150,6 @@ func levenshteinDistance(s1, s2 string) int {
 	return matrix[len1][len2]
 }
 
-// min returns the minimum of three integers
-func min(a, b, c int) int {
-	if a < b {
-		if a < c {
-			return a
-		}
-		return c
-	}
-	if b < c {
-		return b
-	}
-	return c
-}
 
 // min2 returns the minimum of two integers
 func min2(a, b int) int {
@@ -1640,13 +1296,6 @@ func jaroWinklerSimilarity(s1, s2 string) float64 {
 	return jaro + 0.1*float64(prefix)*(1.0-jaro)
 }
 
-// max returns the maximum of two integers
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // min3 returns the minimum of three integers
 func min3(a, b, c int) int {
@@ -1736,13 +1385,6 @@ func (s *SejmServer) fuzzyMatchText(query string, candidates []string, threshold
 
 // HTTP Cache Statistics
 
-// getHTTPCacheStats returns cache hit/miss statistics
-func (s *SejmServer) getHTTPCacheStats() HTTPCacheStats {
-	s.cache.mu.RLock()
-	defer s.cache.mu.RUnlock()
-
-	return *s.cache.HTTPStats
-}
 
 // updateHTTPCacheStats updates cache statistics based on response headers
 func (s *SejmServer) updateHTTPCacheStats(resp *http.Response) {

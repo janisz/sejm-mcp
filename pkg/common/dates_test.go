@@ -77,7 +77,7 @@ func TestSejmDateUnmarshalJSON(t *testing.T) {
 				}
 
 				if tc.expectedDate != "" {
-					actualDate := date.Time.Format("2006-01-02")
+					actualDate := date.Format("2006-01-02")
 					if actualDate != tc.expectedDate {
 						t.Errorf("Expected date %s for %s, but got %s", tc.expectedDate, tc.description, actualDate)
 					}
@@ -259,7 +259,7 @@ func TestSejmDateRoundTrip(t *testing.T) {
 	}
 
 	// Compare (only date part, ignoring time)
-	if !original.Time.Truncate(24 * time.Hour).Equal(restored.Time.Truncate(24 * time.Hour)) {
+	if !original.Truncate(24 * time.Hour).Equal(restored.Truncate(24 * time.Hour)) {
 		t.Errorf("Round-trip failed: original %v, restored %v", original.Time, restored.Time)
 	}
 }
@@ -282,7 +282,7 @@ func TestSejmDateTimeRoundTrip(t *testing.T) {
 	}
 
 	// Compare (truncate to seconds to avoid nanosecond differences)
-	if !original.Time.Truncate(time.Second).Equal(restored.Time.Truncate(time.Second)) {
+	if !original.Truncate(time.Second).Equal(restored.Truncate(time.Second)) {
 		t.Errorf("Round-trip failed: original %v, restored %v", original.Time, restored.Time)
 	}
 }

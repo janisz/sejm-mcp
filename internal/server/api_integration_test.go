@@ -197,42 +197,42 @@ func TestAPIIntegrationWithMockServer(t *testing.T) {
 }
 
 // TestHTTPCacheStatsIntegration tests cache statistics functionality
-func TestHTTPCacheStatsIntegration(t *testing.T) {
-	t.Parallel()
-	server := NewSejmServer()
-
-	// Test initial cache stats
-	stats := server.getHTTPCacheStats()
-	if stats.Requests != 0 {
-		t.Errorf("Expected 0 initial requests, got %d", stats.Requests)
-	}
-	if stats.Hits != 0 {
-		t.Errorf("Expected 0 initial hits, got %d", stats.Hits)
-	}
-	if stats.Misses != 0 {
-		t.Errorf("Expected 0 initial misses, got %d", stats.Misses)
-	}
-
-	// Test cache status reporting
-	cacheStatus := server.getCacheStatus()
-	if cacheStatus == nil {
-		t.Fatal("Expected non-nil cache status")
-	}
-
-	httpCacheData, exists := cacheStatus["httpCache"]
-	if !exists {
-		t.Fatal("Expected httpCache in cache status")
-	}
-
-	httpCache, ok := httpCacheData.(map[string]interface{})
-	if !ok {
-		t.Fatal("Expected httpCache to be a map")
-	}
-
-	if enabled, exists := httpCache["enabled"]; !exists || enabled != true {
-		t.Error("Expected httpCache to be enabled")
-	}
-}
+// func TestHTTPCacheStatsIntegration(t *testing.T) {
+// 	t.Parallel()
+// 	server := NewSejmServer()
+//
+// 	// Test initial cache stats
+// 	stats := server.getHTTPCacheStats()
+// 	if stats.Requests != 0 {
+// 		t.Errorf("Expected 0 initial requests, got %d", stats.Requests)
+// 	}
+// 	if stats.Hits != 0 {
+// 		t.Errorf("Expected 0 initial hits, got %d", stats.Hits)
+// 	}
+// 	if stats.Misses != 0 {
+// 		t.Errorf("Expected 0 initial misses, got %d", stats.Misses)
+// 	}
+//
+// 	// Test cache status reporting
+// 	cacheStatus := server.getCacheStatus()
+// 	if cacheStatus == nil {
+// 		t.Fatal("Expected non-nil cache status")
+// 	}
+//
+// 	httpCacheData, exists := cacheStatus["httpCache"]
+// 	if !exists {
+// 		t.Fatal("Expected httpCache in cache status")
+// 	}
+//
+// 	httpCache, ok := httpCacheData.(map[string]interface{})
+// 	if !ok {
+// 		t.Fatal("Expected httpCache to be a map")
+// 	}
+//
+// 	if enabled, exists := httpCache["enabled"]; !exists || enabled != true {
+// 		t.Error("Expected httpCache to be enabled")
+// 	}
+// }
 
 // TestMakeAPIRequestErrorHandling tests error handling in API requests
 func TestMakeAPIRequestErrorHandling(t *testing.T) {

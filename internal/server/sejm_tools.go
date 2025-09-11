@@ -895,7 +895,7 @@ func (s *SejmServer) handleGetMPs(ctx context.Context, request mcp.CallToolReque
 
 	summary := fmt.Sprintf("Parliamentary term %d MP overview:\n", term)
 	summary += fmt.Sprintf("- Total MPs: %d (%d active, %d inactive)\n", len(mps), activeCount, len(mps)-activeCount)
-	summary += fmt.Sprintf("- Use sejm_get_mp_details with specific mp_id to get full details about any MP\n\n")
+	summary += "- Use sejm_get_mp_details with specific mp_id to get full details about any MP\n\n"
 
 	// Add party breakdown
 	summary += "Party composition:\n"
@@ -904,7 +904,7 @@ func (s *SejmServer) handleGetMPs(ctx context.Context, request mcp.CallToolReque
 	}
 
 	// Show first 20 MPs as examples
-	summary += fmt.Sprintf("\nFirst 20 MPs (use mp_id with sejm_get_mp_details for full info):\n")
+	summary += "\nFirst 20 MPs (use mp_id with sejm_get_mp_details for full info):\n"
 	for i, mp := range mpSummaries {
 		if i >= 20 {
 			break
@@ -1120,9 +1120,7 @@ func (s *SejmServer) handleSearchVotings(ctx context.Context, request mcp.CallTo
 	// Limit results to avoid context overflow
 	limitInt := 20
 	if limit != "" {
-		if parsedLimit, err := fmt.Sscanf(limit, "%d", &limitInt); parsedLimit == 1 && err == nil && limitInt > 0 {
-			// Use parsed limit
-		} else {
+		if parsedLimit, err := fmt.Sscanf(limit, "%d", &limitInt); parsedLimit != 1 || err != nil || limitInt <= 0 {
 			limitInt = 20 // fallback to default
 		}
 	}
@@ -1185,7 +1183,7 @@ func (s *SejmServer) handleSearchVotings(ctx context.Context, request mcp.CallTo
 
 		date := "No date"
 		if voting.Date != nil {
-			date = voting.Date.Time.Format("2006-01-02 15:04")
+			date = voting.Date.Format("2006-01-02 15:04")
 		}
 
 		result := "Unknown"
@@ -1366,9 +1364,7 @@ func (s *SejmServer) searchVotingsByTitle(ctx context.Context, term int, titleSe
 	// Apply limit
 	limitInt := 20
 	if limitStr != "" {
-		if parsedLimit, err := fmt.Sscanf(limitStr, "%d", &limitInt); parsedLimit == 1 && err == nil && limitInt > 0 {
-			// Use parsed limit
-		} else {
+		if parsedLimit, err := fmt.Sscanf(limitStr, "%d", &limitInt); parsedLimit != 1 || err != nil || limitInt <= 0 {
 			limitInt = 20 // fallback to default
 		}
 	}
@@ -1431,7 +1427,7 @@ func (s *SejmServer) searchVotingsByTitle(ctx context.Context, term int, titleSe
 
 			date := "No date"
 			if voting.Date != nil {
-				date = voting.Date.Time.Format("2006-01-02 15:04")
+				date = voting.Date.Format("2006-01-02 15:04")
 			}
 
 			result := "Unknown"
@@ -1469,7 +1465,7 @@ func (s *SejmServer) searchVotingsByTitle(ctx context.Context, term int, titleSe
 	return mcp.NewToolResultText(searchSummary), nil
 }
 
-func (s *SejmServer) handleGetTerms(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func (s *SejmServer) handleGetTerms(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	endpoint := fmt.Sprintf("%s/sejm/term", sejmBaseURL)
 	data, err := s.makeAPIRequest(ctx, endpoint, nil)
 	if err != nil {
@@ -1737,17 +1733,17 @@ func (s *SejmServer) handleGetPrints(ctx context.Context, request mcp.CallToolRe
 	// Note: Print type doesn't have DocumentType field, so we'll just show the prints directly
 
 	summary += "Recent Prints:\n"
-	for i, print := range prints {
+	for i, printItem := range prints {
 		if i >= 15 { // Limit displayed entries
 			summary += fmt.Sprintf("... and %d more prints\n", len(prints)-i)
 			break
 		}
 
-		if print.Number != nil {
-			summary += fmt.Sprintf("Print %s:", *print.Number)
+		if printItem.Number != nil {
+			summary += fmt.Sprintf("Print %s:", *printItem.Number)
 		}
-		if print.Title != nil {
-			summary += fmt.Sprintf(" %s", *print.Title)
+		if printItem.Title != nil {
+			summary += fmt.Sprintf(" %s", *printItem.Title)
 		}
 		summary += "\n"
 	}
@@ -1826,7 +1822,7 @@ func (s *SejmServer) handleGetTranscripts(ctx context.Context, request mcp.CallT
 
 		time := ""
 		if stmt.StartDateTime != nil {
-			time = fmt.Sprintf(" - %s", stmt.StartDateTime.Time.Format("15:04"))
+			time = fmt.Sprintf(" - %s", stmt.StartDateTime.Format("15:04"))
 		}
 
 		summary += fmt.Sprintf("- Statement %d: %s%s%s\n", *stmt.Num, speaker, function, time)
@@ -1877,9 +1873,7 @@ func (s *SejmServer) chunkHTMLContent(htmlContent, documentTitle, chunkSizeStr, 
 
 	chunkNumber := 1
 	if chunkNumberStr != "" {
-		if parsed, err := fmt.Sscanf(chunkNumberStr, "%d", &chunkNumber); parsed == 1 && err == nil && chunkNumber >= 1 {
-			// Use parsed chunk number
-		} else {
+		if parsed, err := fmt.Sscanf(chunkNumberStr, "%d", &chunkNumber); parsed != 1 || err != nil || chunkNumber < 1 {
 			chunkNumber = 1
 		}
 	}
@@ -1900,7 +1894,7 @@ func (s *SejmServer) chunkHTMLContent(htmlContent, documentTitle, chunkSizeStr, 
 		if chunkNumber < totalChunks {
 			chunkInfo += fmt.Sprintf("- Next chunk: chunk_number='%d'\n", chunkNumber+1)
 		}
-		chunkInfo += fmt.Sprintf("- First chunk: chunk_number='1'\n")
+		chunkInfo += "- First chunk: chunk_number='1'\n"
 		chunkInfo += fmt.Sprintf("- Last chunk: chunk_number='%d'\n", totalChunks)
 
 		return mcp.NewToolResultText(chunkInfo), nil
@@ -1932,7 +1926,7 @@ func (s *SejmServer) chunkHTMLContent(htmlContent, documentTitle, chunkSizeStr, 
 		if chunkNumber > 1 {
 			response += fmt.Sprintf("Previous chunk: chunk_number='%d'\n", chunkNumber-1)
 		}
-		response += fmt.Sprintf("Show structure: show_chunk_info='true'")
+		response += "Show structure: show_chunk_info='true'"
 	}
 
 	return mcp.NewToolResultText(response), nil
@@ -1989,7 +1983,7 @@ func (s *SejmServer) handleGetCommitteeSittingsByDate(ctx context.Context, reque
 			summary += fmt.Sprintf(" (Meeting #%d)", *sitting.Num)
 		}
 		if sitting.StartDateTime != nil {
-			summary += fmt.Sprintf(" - %s", sitting.StartDateTime.Time.Format("15:04"))
+			summary += fmt.Sprintf(" - %s", sitting.StartDateTime.Format("15:04"))
 		}
 		if sitting.Room != nil {
 			summary += fmt.Sprintf(" in %s", *sitting.Room)
@@ -2048,12 +2042,12 @@ func (s *SejmServer) handleGetCommitteeSittings(ctx context.Context, request mcp
 			summary += fmt.Sprintf("- Meeting #%d", *sitting.Num)
 		}
 		if sitting.Date != nil {
-			summary += fmt.Sprintf(" on %s", sitting.Date.Time.Format("2006-01-02"))
+			summary += fmt.Sprintf(" on %s", sitting.Date.Format("2006-01-02"))
 		}
 		if sitting.StartDateTime != nil && sitting.EndDateTime != nil {
 			summary += fmt.Sprintf(" (%s-%s)",
-				sitting.StartDateTime.Time.Format("15:04"),
-				sitting.EndDateTime.Time.Format("15:04"))
+				sitting.StartDateTime.Format("15:04"),
+				sitting.EndDateTime.Format("15:04"))
 		}
 		summary += "\n"
 	}
@@ -2088,13 +2082,13 @@ func (s *SejmServer) handleGetCommitteeSittingDetails(ctx context.Context, reque
 	summary := fmt.Sprintf("Committee %s Meeting #%s Details:\n\n", committeeCode, sittingNumber)
 
 	if sitting.Date != nil {
-		summary += fmt.Sprintf("Date: %s\n", sitting.Date.Time.Format("2006-01-02"))
+		summary += fmt.Sprintf("Date: %s\n", sitting.Date.Format("2006-01-02"))
 	}
 	if sitting.StartDateTime != nil {
-		summary += fmt.Sprintf("Start Time: %s\n", sitting.StartDateTime.Time.Format("15:04"))
+		summary += fmt.Sprintf("Start Time: %s\n", sitting.StartDateTime.Format("15:04"))
 	}
 	if sitting.EndDateTime != nil {
-		summary += fmt.Sprintf("End Time: %s\n", sitting.EndDateTime.Time.Format("15:04"))
+		summary += fmt.Sprintf("End Time: %s\n", sitting.EndDateTime.Format("15:04"))
 	}
 	if sitting.Room != nil {
 		summary += fmt.Sprintf("Room: %s\n", *sitting.Room)
@@ -2263,7 +2257,7 @@ func (s *SejmServer) handleGetMPVotingStats(ctx context.Context, request mcp.Cal
 	}
 
 	summary := fmt.Sprintf("Voting statistics for MP %s (term %d):\n\n", mpID, term)
-	summary += fmt.Sprintf("Overall Performance:\n")
+	summary += "Overall Performance:\n"
 	summary += fmt.Sprintf("- Parliamentary sittings tracked: %d\n", totalSittings)
 	summary += fmt.Sprintf("- Total voting opportunities: %d\n", totalVotings)
 	summary += fmt.Sprintf("- Votes cast: %d\n", totalVoted)
@@ -2282,7 +2276,7 @@ func (s *SejmServer) handleGetMPVotingStats(ctx context.Context, request mcp.Cal
 		stat := stats[i]
 		date := "Unknown date"
 		if stat.Date != nil {
-			date = stat.Date.Time.Format("2006-01-02")
+			date = stat.Date.Format("2006-01-02")
 		}
 
 		sitting := "Unknown"
@@ -2370,7 +2364,7 @@ func (s *SejmServer) handleGetMPVotingDetails(ctx context.Context, request mcp.C
 	}
 
 	summary := fmt.Sprintf("Detailed voting record for MP %s during sitting %s on %s (term %d):\n\n", mpID, sitting, date, term)
-	summary += fmt.Sprintf("Voting Summary:\n")
+	summary += "Voting Summary:\n"
 	summary += fmt.Sprintf("- Total votes: %d\n", len(votes))
 	summary += fmt.Sprintf("- Yes votes: %d\n", yesVotes)
 	summary += fmt.Sprintf("- No votes: %d\n", noVotes)
@@ -2379,7 +2373,7 @@ func (s *SejmServer) handleGetMPVotingDetails(ctx context.Context, request mcp.C
 	if otherVotes > 0 {
 		summary += fmt.Sprintf("- Other: %d\n", otherVotes)
 	}
-	summary += fmt.Sprintf("\nDetailed vote-by-vote record:\n")
+	summary += "\nDetailed vote-by-vote record:\n"
 
 	// Show first 15 votes to avoid overwhelming output
 	displayCount := 15
@@ -2407,7 +2401,7 @@ func (s *SejmServer) handleGetMPVotingDetails(ctx context.Context, request mcp.C
 
 		time := ""
 		if vote.Date != nil {
-			time = fmt.Sprintf(" - %s", vote.Date.Time.Format("15:04"))
+			time = fmt.Sprintf(" - %s", vote.Date.Format("15:04"))
 		}
 
 		votingNum := ""
@@ -2552,7 +2546,7 @@ func (s *SejmServer) handleGetVideos(ctx context.Context, request mcp.CallToolRe
 
 		startTime := ""
 		if video.StartDateTime != nil {
-			startTime = fmt.Sprintf(" - %s", video.StartDateTime.Time.Format("2006-01-02 15:04"))
+			startTime = fmt.Sprintf(" - %s", video.StartDateTime.Format("2006-01-02 15:04"))
 		}
 
 		streamingInfo := ""
@@ -2608,15 +2602,15 @@ func (s *SejmServer) handleGetVideosToday(ctx context.Context, request mcp.CallT
 
 	for _, video := range videos {
 		if video.StartDateTime != nil && video.EndDateTime != nil {
-			if video.EndDateTime.Time.Before(currentTime) {
+			if video.EndDateTime.Before(currentTime) {
 				completed = append(completed, video)
-			} else if video.StartDateTime.Time.After(currentTime) {
+			} else if video.StartDateTime.After(currentTime) {
 				upcoming = append(upcoming, video)
 			} else {
 				liveNow = append(liveNow, video)
 			}
 		} else if video.StartDateTime != nil {
-			if video.StartDateTime.Time.Before(currentTime) {
+			if video.StartDateTime.Before(currentTime) {
 				liveNow = append(liveNow, video) // Might still be live
 			} else {
 				upcoming = append(upcoming, video)
@@ -2625,7 +2619,7 @@ func (s *SejmServer) handleGetVideosToday(ctx context.Context, request mcp.CallT
 	}
 
 	summary := fmt.Sprintf("Today's parliamentary video transmissions (%s, term %d):\n\n", today, term)
-	summary += fmt.Sprintf("📊 Overview:\n")
+	summary += "📊 Overview:\n"
 	summary += fmt.Sprintf("- Total transmissions: %d\n", len(videos))
 	summary += fmt.Sprintf("- Currently live: %d\n", len(liveNow))
 	summary += fmt.Sprintf("- Upcoming: %d\n", len(upcoming))
@@ -2664,7 +2658,7 @@ func (s *SejmServer) handleGetVideosToday(ctx context.Context, request mcp.CallT
 
 			startTime := ""
 			if video.StartDateTime != nil {
-				startTime = fmt.Sprintf(" at %s", video.StartDateTime.Time.Format("15:04"))
+				startTime = fmt.Sprintf(" at %s", video.StartDateTime.Format("15:04"))
 			}
 
 			room := ""
@@ -2693,8 +2687,8 @@ func (s *SejmServer) handleGetVideosToday(ctx context.Context, request mcp.CallT
 			timeRange := ""
 			if video.StartDateTime != nil && video.EndDateTime != nil {
 				timeRange = fmt.Sprintf(" (%s-%s)",
-					video.StartDateTime.Time.Format("15:04"),
-					video.EndDateTime.Time.Format("15:04"))
+					video.StartDateTime.Format("15:04"),
+					video.EndDateTime.Format("15:04"))
 			}
 
 			summary += fmt.Sprintf("- %s%s\n", title, timeRange)
@@ -2749,13 +2743,13 @@ func (s *SejmServer) handleGetVideosByDate(ctx context.Context, request mcp.Call
 
 		// Calculate duration if available
 		if video.StartDateTime != nil && video.EndDateTime != nil {
-			duration := video.EndDateTime.Time.Sub(video.StartDateTime.Time)
+			duration := video.EndDateTime.Sub(video.StartDateTime.Time)
 			totalDuration += duration.Hours()
 		}
 	}
 
 	summary := fmt.Sprintf("Parliamentary video transmissions for %s (term %d):\n\n", date, term)
-	summary += fmt.Sprintf("📊 Summary:\n")
+	summary += "📊 Summary:\n"
 	summary += fmt.Sprintf("- Total transmissions: %d\n", len(videos))
 	summary += fmt.Sprintf("- Committee meetings: %d\n", committeeCount)
 	summary += fmt.Sprintf("- Plenary sessions: %d\n", plenaryCount)
@@ -2783,10 +2777,10 @@ func (s *SejmServer) handleGetVideosByDate(ctx context.Context, request mcp.Call
 
 		timeInfo := ""
 		if video.StartDateTime != nil {
-			startTime := video.StartDateTime.Time.Format("15:04")
+			startTime := video.StartDateTime.Format("15:04")
 			if video.EndDateTime != nil {
-				endTime := video.EndDateTime.Time.Format("15:04")
-				duration := video.EndDateTime.Time.Sub(video.StartDateTime.Time)
+				endTime := video.EndDateTime.Format("15:04")
+				duration := video.EndDateTime.Sub(video.StartDateTime.Time)
 				timeInfo = fmt.Sprintf(" %s-%s (%.0f min)", startTime, endTime, duration.Minutes())
 			} else {
 				timeInfo = fmt.Sprintf(" from %s", startTime)
@@ -2875,12 +2869,12 @@ func (s *SejmServer) handleGetVideoDetails(ctx context.Context, request mcp.Call
 
 	// Timing information
 	if video.StartDateTime != nil {
-		summary += fmt.Sprintf("⏰ Start: %s\n", video.StartDateTime.Time.Format("2006-01-02 15:04:05"))
+		summary += fmt.Sprintf("⏰ Start: %s\n", video.StartDateTime.Format("2006-01-02 15:04:05"))
 	}
 	if video.EndDateTime != nil {
-		summary += fmt.Sprintf("⏰ End: %s\n", video.EndDateTime.Time.Format("2006-01-02 15:04:05"))
+		summary += fmt.Sprintf("⏰ End: %s\n", video.EndDateTime.Format("2006-01-02 15:04:05"))
 		if video.StartDateTime != nil {
-			duration := video.EndDateTime.Time.Sub(video.StartDateTime.Time)
+			duration := video.EndDateTime.Sub(video.StartDateTime.Time)
 			summary += fmt.Sprintf("⏱️ Duration: %s\n", duration.String())
 		}
 	} else if video.StartDateTime != nil {
@@ -4098,8 +4092,8 @@ func (s *SejmServer) handleGetPrintDetails(ctx context.Context, request mcp.Call
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to retrieve print details: %v", err)), nil
 	}
 
-	var print sejm.Print
-	if err := json.Unmarshal(data, &print); err != nil {
+	var printData sejm.Print
+	if err := json.Unmarshal(data, &printData); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse print data: %v", err)), nil
 	}
 
@@ -4108,28 +4102,28 @@ func (s *SejmServer) handleGetPrintDetails(ctx context.Context, request mcp.Call
 	var results []string
 	var nextActions []string
 
-	if print.Title != nil {
-		summary = append(summary, fmt.Sprintf("Title: %s", *print.Title))
+	if printData.Title != nil {
+		summary = append(summary, fmt.Sprintf("Title: %s", *printData.Title))
 	}
 
-	if print.Number != nil {
-		summary = append(summary, fmt.Sprintf("Print Number: %s", *print.Number))
+	if printData.Number != nil {
+		summary = append(summary, fmt.Sprintf("Print Number: %s", *printData.Number))
 	}
 
-	if print.DeliveryDate != nil {
-		summary = append(summary, fmt.Sprintf("Delivery Date: %s", print.DeliveryDate.Time.Format("2006-01-02")))
+	if printData.DeliveryDate != nil {
+		summary = append(summary, fmt.Sprintf("Delivery Date: %s", printData.DeliveryDate.Format("2006-01-02")))
 	}
 
 	// Add complete details
-	printJSON, _ := json.MarshalIndent(print, "", "  ")
+	printJSON, _ := json.MarshalIndent(printData, "", "  ")
 	results = append(results, string(printJSON))
 
 	// Suggest next actions
 	nextActions = append(nextActions, fmt.Sprintf("View all prints: sejm_get_prints with term='%s'", term))
 
-	if print.Attachments != nil && len(*print.Attachments) > 0 {
+	if printData.Attachments != nil && len(*printData.Attachments) > 0 {
 		nextActions = append(nextActions, fmt.Sprintf("Download attachments: sejm_get_print_attachment with term='%s' and num='%s'", term, num))
-		summary = append(summary, fmt.Sprintf("Attachments available: %d files", len(*print.Attachments)))
+		summary = append(summary, fmt.Sprintf("Attachments available: %d files", len(*printData.Attachments)))
 	}
 
 	response := StandardResponse{
