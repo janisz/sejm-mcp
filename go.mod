@@ -7,8 +7,9 @@ toolchain go1.24.6
 require (
 	github.com/alexshin/httpcache v0.0.0-20230821155949-55fd53e8dede
 	github.com/gen2brain/go-fitz v1.24.15
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/mark3labs/mcp-go v0.39.1
-	github.com/oapi-codegen/runtime v1.1.1
+	github.com/oapi-codegen/runtime v1.1.2
 )
 
 require (
@@ -16,7 +17,6 @@ require (
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jupiterrider/ffi v0.5.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
