@@ -2033,7 +2033,7 @@ func (s *SejmServer) handleGetParliamentaryKeywords(ctx context.Context, request
 		"government_positions": {
 			"premier", "wicepremier", "minister", "wiceminister",
 			"sekretarz stanu", "podsekretarz stanu", "prezes",
-			"prezes Rady Ministrów", "prezydent", "marszałek Sejmu", // nolint:misspell
+			"prezes Rady Ministrów", "prezydent", "marszałek Sejmu", //nolint:misspell
 			"marszałek Senatu", "prezes TK", "Rzecznik Praw Obywatelskich",
 			"prezes NIK", "prezes NBP", "przewodniczący KNF",
 			"główny inspektor", "komendant główny", "dyrektor generalny",
