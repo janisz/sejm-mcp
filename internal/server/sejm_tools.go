@@ -306,6 +306,10 @@ func (s *SejmServer) registerSejmTools() {
 					"type":        "string",
 					"description": "Filter by MP last name (case-insensitive partial match). Examples: 'Kowal' finds Kowalski, 'Tusk' finds Donald Tusk. Useful for finding specific MPs or name patterns.",
 				},
+				"summary_only": map[string]interface{}{
+					"type":        "string",
+					"description": "Return condensed information: 'true' for summary mode (name, club, district only), 'false' for full details (default). Summary mode provides faster responses with essential information for large datasets.",
+				},
 			},
 		},
 	}, s.handleGetMPs)
@@ -493,7 +497,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_transcripts",
-		Description: "Retrieve parliamentary proceeding transcripts - complete stenographic records of parliamentary debates, speeches, and discussions. Returns detailed transcript information including individual MP statements, speech timestamps, debate topics, speaker identification, and full text content. For large PDF transcripts, use pagination parameters (page, pages_per_chunk) to manage response size and avoid context overflow. Essential for analyzing parliamentary debates, tracking MP positions on issues, studying political discourse, researching specific policy discussions, and understanding the legislative decision-making process.",
+		Description: "Retrieve parliamentary proceeding transcripts - complete stenographic records of parliamentary debates, speeches, and discussions. Returns detailed transcript information including individual MP statements, speech timestamps, debate topics, speaker identification, and full text content. For large PDF transcripts, use pagination parameters (page, pages_per_chunk) to manage response size and avoid context overflow. For statement lists with hundreds of statements, use limit and offset for efficient pagination. Essential for analyzing parliamentary debates, tracking MP positions on issues, studying political discourse, researching specific policy discussions, and understanding the legislative decision-making process.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -512,6 +516,14 @@ func (s *SejmServer) registerSejmTools() {
 				"format": map[string]interface{}{
 					"type":        "string",
 					"description": "Response format: 'list' for statement list (default), 'pdf' for complete transcript as PDF, 'text' for PDF converted to searchable text.",
+				},
+				"limit": map[string]interface{}{
+					"type":        "string",
+					"description": "For 'list' format: Maximum number of statements to return (default: 25, max: 100). Use for pagination through potentially hundreds of statements per proceeding.",
+				},
+				"offset": map[string]interface{}{
+					"type":        "string",
+					"description": "For 'list' format: Number of statements to skip (default: 0). Use with limit for pagination through statement lists.",
 				},
 				"page": map[string]interface{}{
 					"type":        "string",
@@ -813,7 +825,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_videos",
-		Description: "Retrieve parliamentary video transmissions and live streams with comprehensive filtering options. Returns detailed information about video broadcasts including live parliamentary sessions, committee meetings, special events, and archived proceedings. Each video entry includes streaming URLs, player links, transmission metadata, schedules, and technical details. Essential for accessing live parliamentary coverage, following specific committee work, researching historical proceedings, media monitoring, and democratic transparency. Use this to find current live streams, search for specific meeting recordings, or track parliamentary video activity.",
+		Description: "Retrieve parliamentary video transmissions and live streams with comprehensive filtering and smart pagination. Returns detailed information about video broadcasts including live parliamentary sessions, committee meetings, special events, and archived proceedings. Each video entry includes streaming URLs, player links, transmission metadata, schedules, and technical details. **SMART PAGINATION**: Major terms have hundreds of video transmissions. Use pagination (limit/offset) and smart filters to manage large datasets. Examples: limit='25' for manageable chunks, live_only='true' for active streams, committee='ENM' for specific committee coverage, has_video='true' for streamable content. Results are typically sorted by date (newest first) so pagination naturally provides recent content. Essential for accessing live parliamentary coverage, following specific committee work, researching historical proceedings, media monitoring, and democratic transparency.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -843,11 +855,23 @@ func (s *SejmServer) registerSejmTools() {
 				},
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of videos to return (default: 20, max: 500). Use higher values for comprehensive searches, but be aware of context limits.",
+					"description": "Maximum number of videos to return (default: 25, max: 100). Use for pagination control. Examples: '10' for quick browse, '25' for standard lists, '50' for comprehensive search.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
-					"description": "Starting position in results for pagination (default: 0). Use with limit for browsing large result sets.",
+					"description": "Starting position in results for pagination (default: 0). Use with limit to browse large result sets. Example: offset='25' with limit='25' shows results 26-50.",
+				},
+				"live_only": map[string]interface{}{
+					"type":        "string",
+					"description": "Smart filter for live transmissions only. Set to 'true' to show only currently active/live streams, 'false' or omit for all videos including archived content.",
+				},
+				"has_video": map[string]interface{}{
+					"type":        "string",
+					"description": "Smart filter for available streaming content. Set to 'true' to show only videos with streaming links available, 'false' or omit for all entries including metadata-only records.",
+				},
+				"summary_only": map[string]interface{}{
+					"type":        "string",
+					"description": "Return condensed information: 'true' for summary mode (title, date, type only), 'false' for full details (default). Summary mode provides faster responses for large video archives.",
 				},
 			},
 		},
@@ -918,6 +942,7 @@ func (s *SejmServer) handleGetMPs(ctx context.Context, request mcp.CallToolReque
 	clubFilter := request.GetString("club", "")
 	activeFilter := request.GetString("active", "")
 	lastNameFilter := strings.ToLower(request.GetString("last_name", ""))
+	summaryOnly := strings.ToLower(request.GetString("summary_only", "")) == "true"
 
 	limit, err := strconv.Atoi(limitStr)
 	if err != nil || limit < 1 || limit > 500 {
@@ -1022,8 +1047,10 @@ func (s *SejmServer) handleGetMPs(ctx context.Context, request mcp.CallToolReque
 		})
 	}
 
-	summary := fmt.Sprintf("Parliamentary term %d MP overview:\n", term)
-	summary += fmt.Sprintf("- Total MPs: %d (%d active, %d inactive)\n", len(mps), activeCount, len(mps)-activeCount)
+	// Build response using StandardResponse pattern with summary mode support
+	var responseSummary []string
+	responseSummary = append(responseSummary, fmt.Sprintf("Term: %d", term))
+	responseSummary = append(responseSummary, fmt.Sprintf("Total MPs: %d (%d active, %d inactive)", len(mps), activeCount, len(mps)-activeCount))
 
 	// Add filter information
 	if clubFilter != "" || activeFilter != "" || lastNameFilter != "" {
@@ -1037,67 +1064,106 @@ func (s *SejmServer) handleGetMPs(ctx context.Context, request mcp.CallToolReque
 		if lastNameFilter != "" {
 			filters = append(filters, fmt.Sprintf("last_name: %s", lastNameFilter))
 		}
-		summary += fmt.Sprintf("- Filtered by: %s\n", strings.Join(filters, ", "))
-		summary += fmt.Sprintf("- Matching MPs: %d\n", totalFiltered)
+		responseSummary = append(responseSummary, fmt.Sprintf("Filtered by: %s", strings.Join(filters, ", ")))
+		responseSummary = append(responseSummary, fmt.Sprintf("Matching MPs: %d", totalFiltered))
 	}
 
-	summary += fmt.Sprintf("- Showing: %d-%d of %d %s\n", start+1, end, totalFiltered, func() string {
+	responseSummary = append(responseSummary, fmt.Sprintf("Showing: %d-%d of %d %s", start+1, end, totalFiltered, func() string {
 		if clubFilter != "" || activeFilter != "" || lastNameFilter != "" { return "filtered MPs" } else { return "total MPs" }
-	}())
-	summary += "- Use sejm_get_mp_details with specific mp_id to get full details about any MP\n\n"
+	}()))
 
-	// Add party breakdown
-	summary += "Party composition (all MPs):\n"
-	for party, count := range partyStats {
-		summary += fmt.Sprintf("- %s: %d MPs\n", party, count)
+	if summaryOnly {
+		responseSummary = append(responseSummary, "Mode: Summary (condensed information)")
 	}
 
-	// Show paginated MPs
-	if len(mpSummaries) == 0 {
-		summary += "\nNo MPs found matching the current filters.\n"
+	var dataLines []string
+	if summaryOnly {
+		// Summary mode: just names, parties, and IDs
+		dataLines = append(dataLines, "MP Summary List:")
+		dataLines = append(dataLines, "")
+		if len(mpSummaries) == 0 {
+			dataLines = append(dataLines, "No MPs found matching the current filters.")
+		} else {
+			for _, mp := range mpSummaries {
+				party := "Independent"
+				if mp.Party != nil {
+					party = *mp.Party
+				}
+				dataLines = append(dataLines, fmt.Sprintf("• ID %v: %s (%s)", *mp.ID, mp.Name, party))
+			}
+		}
 	} else {
-		summary += fmt.Sprintf("\nMPs %d-%d (use mp_id with sejm_get_mp_details for full info):\n", start+1, end)
-		for _, mp := range mpSummaries {
-			activeStatus := "inactive"
-			if mp.Active != nil && *mp.Active {
-				activeStatus = "active"
+		// Full mode: include party breakdown and detailed information
+		dataLines = append(dataLines, "Party Composition (all MPs):")
+		for party, count := range partyStats {
+			dataLines = append(dataLines, fmt.Sprintf("• %s: %d MPs", party, count))
+		}
+
+		dataLines = append(dataLines, "")
+		dataLines = append(dataLines, "MP Details:")
+		if len(mpSummaries) == 0 {
+			dataLines = append(dataLines, "No MPs found matching the current filters.")
+		} else {
+			for _, mp := range mpSummaries {
+				activeStatus := "inactive"
+				if mp.Active != nil && *mp.Active {
+					activeStatus = "active"
+				}
+				party := "Independent"
+				if mp.Party != nil {
+					party = *mp.Party
+				}
+				district := ""
+				if mp.District != nil && mp.DistrictName != nil {
+					district = fmt.Sprintf(" - District %d (%s)", *mp.District, *mp.DistrictName)
+				}
+				dataLines = append(dataLines, fmt.Sprintf("• ID %v: %s (%s) - %s%s", *mp.ID, mp.Name, party, activeStatus, district))
 			}
-			party := "No party"
-			if mp.Party != nil {
-				party = *mp.Party
-			}
-			summary += fmt.Sprintf("- ID %v: %s (%s) - %s\n", *mp.ID, mp.Name, party, activeStatus)
 		}
 	}
 
-	// Add pagination navigation hints
-	if totalFiltered > end {
-		remaining := totalFiltered - end
-		summary += fmt.Sprintf("\n... %d more MPs available (use offset=%d to continue)\n", remaining, end)
-	}
+	// Build next actions
+	var nextActions []string
 
-	// Add navigation actions
-	var navigationHints []string
+	// Navigation actions
 	if offset > 0 {
 		prevOffset := offset - limit
 		if prevOffset < 0 {
 			prevOffset = 0
 		}
-		navigationHints = append(navigationHints, fmt.Sprintf("Previous page: offset=%d limit=%d", prevOffset, limit))
+		nextActions = append(nextActions, fmt.Sprintf("Previous page: sejm_get_mps with offset='%d', limit='%d'", prevOffset, limit))
 	}
 
 	if end < totalFiltered {
-		navigationHints = append(navigationHints, fmt.Sprintf("Next page: offset=%d limit=%d", end, limit))
+		nextActions = append(nextActions, fmt.Sprintf("Next page: sejm_get_mps with offset='%d', limit='%d'", end, limit))
 	}
 
-	if len(navigationHints) > 0 {
-		summary += "\nNavigation:\n"
-		for _, hint := range navigationHints {
-			summary += fmt.Sprintf("- %s\n", hint)
-		}
+	nextActions = append(nextActions, "Get MP details: sejm_get_mp_details with specific mp_id")
+	nextActions = append(nextActions, "Get MP voting stats: sejm_get_mp_voting_stats with mp_id")
+
+	if summaryOnly {
+		nextActions = append(nextActions, "Get full details: sejm_get_mps with summary_only='false'")
+	} else {
+		nextActions = append(nextActions, "Get condensed list: sejm_get_mps with summary_only='true'")
 	}
 
-	return mcp.NewToolResultText(summary), nil
+	var statusMode string
+	if summaryOnly {
+		statusMode = "Summary Mode"
+	} else {
+		statusMode = "Detailed Mode"
+	}
+
+	response := StandardResponse{
+		Operation:   fmt.Sprintf("Parliamentary MPs (%s)", statusMode),
+		Status:      "Retrieved Successfully",
+		Summary:     responseSummary,
+		Data:        dataLines,
+		NextActions: nextActions,
+		Note:        fmt.Sprintf("Showing %d-%d of %d MPs. Use summary_only='true' for faster responses with essential info only.", start+1, end, totalFiltered),
+	}
+
+	return mcp.NewToolResultText(response.Format()), nil
 }
 
 func (s *SejmServer) handleGetMPDetails(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -1957,6 +2023,8 @@ func (s *SejmServer) handleGetTranscripts(ctx context.Context, request mcp.CallT
 	proceedingID := request.GetString("proceeding_id", "")
 	date := request.GetString("date", "")
 	format := request.GetString("format", "list")
+	limitStr := request.GetString("limit", "25")
+	offsetStr := request.GetString("offset", "0")
 	page := request.GetString("page", "1")
 	pagesPerChunk := request.GetString("pages_per_chunk", "5")
 	showPageInfo := request.GetString("show_page_info", "false")
@@ -1985,6 +2053,17 @@ func (s *SejmServer) handleGetTranscripts(ctx context.Context, request mcp.CallT
 		return s.extractTextWithPagination(ctx, pdfData, "", "", fmt.Sprintf("proceeding-%s-%s", proceedingID, date), page, pagesPerChunk, showPageInfo)
 	}
 
+	// Parse pagination parameters for statement list
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 || limit > 100 {
+		limit = 25 // default
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0 // default
+	}
+
 	// Default: return statement list
 	data, err := s.makeAPIRequest(ctx, endpoint, nil)
 	if err != nil {
@@ -1996,17 +2075,36 @@ func (s *SejmServer) handleGetTranscripts(ctx context.Context, request mcp.CallT
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse transcript data from API response: %v. The API may have returned unexpected data format.", err)), nil
 	}
 
-	// Create summary of statements
-	summary := fmt.Sprintf("Parliamentary proceedings transcript for term %d, proceeding %s on %s:\n", term, proceedingID, date)
-	summary += fmt.Sprintf("- Total statements: %d\n\n", len(*statements.Statements))
+	allStatements := *statements.Statements
+	totalStatements := len(allStatements)
 
-	summary += "Statement list (number, speaker, function, time):\n"
-	for i, stmt := range *statements.Statements {
-		if i >= 20 { // Limit displayed entries
-			summary += fmt.Sprintf("... and %d more statements. Use sejm_get_statement with specific statement numbers for full content.\n", len(*statements.Statements)-i)
-			break
-		}
+	// Apply pagination
+	start := offset
+	end := offset + limit
+	if start >= totalStatements {
+		start = totalStatements
+		end = totalStatements
+	} else if end > totalStatements {
+		end = totalStatements
+	}
 
+	var paginatedStatements []sejm.Statement
+	if start < totalStatements {
+		paginatedStatements = allStatements[start:end]
+	}
+
+	// Build response using StandardResponse pattern
+	var summary []string
+	summary = append(summary, fmt.Sprintf("Proceeding: %s (Term %d)", proceedingID, term))
+	summary = append(summary, fmt.Sprintf("Date: %s", date))
+	summary = append(summary, fmt.Sprintf("Total statements: %d", totalStatements))
+	summary = append(summary, fmt.Sprintf("Showing: %d-%d of %d statements", start+1, end, totalStatements))
+
+	var dataLines []string
+	dataLines = append(dataLines, "Parliamentary Debate Statements:")
+	dataLines = append(dataLines, "")
+
+	for _, stmt := range paginatedStatements {
 		speaker := "Unknown speaker"
 		if stmt.Name != nil {
 			speaker = *stmt.Name
@@ -2017,15 +2115,50 @@ func (s *SejmServer) handleGetTranscripts(ctx context.Context, request mcp.CallT
 			function = fmt.Sprintf(" (%s)", *stmt.Function)
 		}
 
-		time := ""
+		timeStr := ""
 		if stmt.StartDateTime != nil {
-			time = fmt.Sprintf(" - %s", stmt.StartDateTime.Format("15:04"))
+			timeStr = fmt.Sprintf(" - %s", stmt.StartDateTime.Format("15:04"))
 		}
 
-		summary += fmt.Sprintf("- Statement %d: %s%s%s\n", *stmt.Num, speaker, function, time)
+		stmtNum := "?"
+		if stmt.Num != nil {
+			stmtNum = fmt.Sprintf("%d", *stmt.Num)
+		}
+
+		dataLines = append(dataLines, fmt.Sprintf("• Statement %s: %s%s%s", stmtNum, speaker, function, timeStr))
 	}
 
-	return mcp.NewToolResultText(summary), nil
+	// Build next actions
+	var nextActions []string
+
+	// Navigation actions
+	if offset > 0 {
+		prevOffset := offset - limit
+		if prevOffset < 0 {
+			prevOffset = 0
+		}
+		nextActions = append(nextActions, fmt.Sprintf("Previous page: sejm_get_transcripts with proceeding_id='%s', date='%s', offset='%d', limit='%d'", proceedingID, date, prevOffset, limit))
+	}
+
+	if end < totalStatements {
+		nextOffset := offset + limit
+		nextActions = append(nextActions, fmt.Sprintf("Next page: sejm_get_transcripts with proceeding_id='%s', date='%s', offset='%d', limit='%d'", proceedingID, date, nextOffset, limit))
+	}
+
+	nextActions = append(nextActions, "Get full statement text: sejm_get_statement with specific statement_num")
+	nextActions = append(nextActions, "Search transcript content: sejm_search_transcript_content for specific topics or speakers")
+	nextActions = append(nextActions, "Download full transcript: sejm_get_transcripts with format='pdf' or format='text'")
+
+	response := StandardResponse{
+		Operation:   "Parliamentary Transcript Statements",
+		Status:      "Retrieved Successfully",
+		Summary:     summary,
+		Data:        dataLines,
+		NextActions: nextActions,
+		Note:        fmt.Sprintf("Showing statements %d-%d of %d total. Use pagination for large debates with hundreds of statements.", start+1, end, totalStatements),
+	}
+
+	return mcp.NewToolResultText(response.Format()), nil
 }
 
 func (s *SejmServer) handleGetStatement(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -2789,6 +2922,25 @@ func (s *SejmServer) handleGetVideos(ctx context.Context, request mcp.CallToolRe
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid parliamentary term: %v. Please use term numbers 1-10.", err)), nil
 	}
 
+	// Parse pagination parameters
+	limitStr := request.GetString("limit", "25")
+	offsetStr := request.GetString("offset", "0")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 || limit > 100 {
+		limit = 25
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
+	// Parse smart filter parameters
+	liveOnly := strings.ToLower(request.GetString("live_only", "")) == "true"
+	hasVideoOnly := strings.ToLower(request.GetString("has_video", "")) == "true"
+	summaryOnly := strings.ToLower(request.GetString("summary_only", "")) == "true"
+
 	params := make(map[string]string)
 
 	if committee := request.GetString("committee", ""); committee != "" {
@@ -2806,24 +2958,62 @@ func (s *SejmServer) handleGetVideos(ctx context.Context, request mcp.CallToolRe
 	if videoType := request.GetString("type", ""); videoType != "" {
 		params["type"] = videoType
 	}
-	if limit := request.GetString("limit", ""); limit != "" {
-		params["limit"] = limit
-	} else {
-		params["limit"] = "20" // Default limit
+
+	// Set higher initial limit for filtering
+	fetchLimit := limit * 3 // Get more records to filter from
+	if fetchLimit > 500 {
+		fetchLimit = 500
 	}
-	if offset := request.GetString("offset", ""); offset != "" {
-		params["offset"] = offset
-	}
+	params["limit"] = fmt.Sprintf("%d", fetchLimit)
+	params["offset"] = fmt.Sprintf("%d", offset)
 
 	endpoint := fmt.Sprintf("%s/sejm/term%d/videos", sejmBaseURL, term)
-	data, err := s.makeAPIRequest(ctx, endpoint, params)
+	apiData, err := s.makeAPIRequest(ctx, endpoint, params)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to retrieve videos: %v. Please try again.", err)), nil
 	}
 
-	var videos []sejm.Video
-	if err := json.Unmarshal(data, &videos); err != nil {
+	var allVideos []sejm.Video
+	if err := json.Unmarshal(apiData, &allVideos); err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse videos data: %v.", err)), nil
+	}
+
+	// Apply smart filters to the results
+	var filteredVideos []sejm.Video
+
+	for _, video := range allVideos {
+		// Apply live_only filter
+		if liveOnly {
+			isLive := video.StartDateTime != nil && video.EndDateTime == nil
+			if !isLive {
+				continue
+			}
+		}
+
+		// Apply has_video filter
+		if hasVideoOnly {
+			hasStreaming := video.VideoLink != nil && *video.VideoLink != ""
+			if !hasStreaming {
+				continue
+			}
+		}
+
+		filteredVideos = append(filteredVideos, video)
+	}
+
+	totalBeforeFiltering := len(allVideos)
+	totalAfterFiltering := len(filteredVideos)
+
+	// Apply pagination to filtered results
+	start := 0 // Reset offset since we already applied it in API call
+	end := limit
+	if end > len(filteredVideos) {
+		end = len(filteredVideos)
+	}
+
+	var videos []sejm.Video
+	if start < len(filteredVideos) {
+		videos = filteredVideos[start:end]
 	}
 
 	if len(videos) == 0 {
@@ -2843,19 +3033,26 @@ func (s *SejmServer) handleGetVideos(ctx context.Context, request mcp.CallToolRe
 		if params["type"] != "" {
 			filtersUsed = append(filtersUsed, fmt.Sprintf("type: %s", params["type"]))
 		}
+		if liveOnly {
+			filtersUsed = append(filtersUsed, "live streams only")
+		}
+		if hasVideoOnly {
+			filtersUsed = append(filtersUsed, "streaming content only")
+		}
 
 		filterText := ""
 		if len(filtersUsed) > 0 {
 			filterText = fmt.Sprintf(" with filters: %s", strings.Join(filtersUsed, ", "))
 		}
 
-		return mcp.NewToolResultText(fmt.Sprintf("No video transmissions found for term %d%s.\n\nTry:\n- Removing or adjusting date filters\n- Using different committee codes\n- Searching with broader title terms\n- Checking if videos exist for this term period", term, filterText)), nil
+		return mcp.NewToolResultText(fmt.Sprintf("No video transmissions found for term %d%s.\n\nTry:\n- Removing smart filters (live_only, has_video)\n- Adjusting date filters\n- Using different committee codes\n- Searching with broader title terms\n- Using sejm_get_videos_today for current activity", term, filterText)), nil
 	}
 
 	// Analyze video types and content
 	liveCount := 0
 	committeeCount := 0
 	plenaryCount := 0
+	streamingCount := 0
 
 	for _, video := range videos {
 		if video.Type != nil {
@@ -2870,69 +3067,197 @@ func (s *SejmServer) handleGetVideos(ctx context.Context, request mcp.CallToolRe
 		if video.StartDateTime != nil && video.EndDateTime == nil {
 			liveCount++
 		}
+		if video.VideoLink != nil && *video.VideoLink != "" {
+			streamingCount++
+		}
 	}
 
-	summary := fmt.Sprintf("Video transmissions for parliamentary term %d:\n", term)
-	summary += fmt.Sprintf("- Total videos found: %d\n", len(videos))
-	summary += fmt.Sprintf("- Committee meetings: %d\n", committeeCount)
-	summary += fmt.Sprintf("- Plenary sessions: %d\n", plenaryCount)
-	summary += fmt.Sprintf("- Currently live: %d\n\n", liveCount)
+	// Build response with comprehensive information
+	var summary []string
+	var dataLines []string
+	var nextActions []string
 
-	// Show recent videos (limit to 10 for readability)
-	displayCount := 10
-	if len(videos) < displayCount {
-		displayCount = len(videos)
+	// Summary section
+	summary = append(summary, fmt.Sprintf("Video transmissions for parliamentary term %d", term))
+	if totalBeforeFiltering != totalAfterFiltering {
+		summary = append(summary, fmt.Sprintf("Found %d videos (filtered from %d total)", totalAfterFiltering, totalBeforeFiltering))
+	} else {
+		summary = append(summary, fmt.Sprintf("Found %d videos total", totalAfterFiltering))
+	}
+	summary = append(summary, fmt.Sprintf("Showing videos %d-%d (limit: %d, offset: %d)", offset+1, offset+len(videos), limit, offset))
+
+	// Filter information
+	filtersActive := []string{}
+	if params["comm"] != "" {
+		filtersActive = append(filtersActive, fmt.Sprintf("Committee: %s", params["comm"]))
+	}
+	if params["since"] != "" {
+		filtersActive = append(filtersActive, fmt.Sprintf("Since: %s", params["since"]))
+	}
+	if params["till"] != "" {
+		filtersActive = append(filtersActive, fmt.Sprintf("Until: %s", params["till"]))
+	}
+	if params["title"] != "" {
+		filtersActive = append(filtersActive, fmt.Sprintf("Title: %s", params["title"]))
+	}
+	if params["type"] != "" {
+		filtersActive = append(filtersActive, fmt.Sprintf("Type: %s", params["type"]))
+	}
+	if liveOnly {
+		filtersActive = append(filtersActive, "Live streams only")
+	}
+	if hasVideoOnly {
+		filtersActive = append(filtersActive, "Streaming content only")
 	}
 
-	summary += "Recent video transmissions:\n"
-	for i := 0; i < displayCount; i++ {
-		video := videos[i]
-
-		title := "No title"
-		if video.Title != nil {
-			title = *video.Title
-		}
-
-		videoType := "Unknown type"
-		if video.Type != nil {
-			videoType = *video.Type
-		}
-
-		room := ""
-		if video.Room != nil {
-			room = fmt.Sprintf(" in %s", *video.Room)
-		}
-
-		committee := ""
-		if video.Committee != nil {
-			committee = fmt.Sprintf(" (Committee: %s)", *video.Committee)
-		}
-
-		startTime := ""
-		if video.StartDateTime != nil {
-			startTime = fmt.Sprintf(" - %s", video.StartDateTime.Format("2006-01-02 15:04"))
-		}
-
-		streamingInfo := ""
-		if video.VideoLink != nil {
-			streamingInfo = " [Streaming available]"
-		}
-
-		unid := ""
-		if video.Unid != nil {
-			unid = fmt.Sprintf(" (ID: %s)", *video.Unid)
-		}
-
-		summary += fmt.Sprintf("- %s (%s)%s%s%s%s%s\n", title, videoType, room, committee, startTime, streamingInfo, unid)
+	if len(filtersActive) > 0 {
+		summary = append(summary, fmt.Sprintf("Active filters: %s", strings.Join(filtersActive, ", ")))
 	}
 
-	if len(videos) > displayCount {
-		summary += fmt.Sprintf("\n... and %d more videos. Use offset parameter for pagination or add filters to narrow results.", len(videos)-displayCount)
+	if summaryOnly {
+		// Summary mode: condensed content analysis only
+		summary = append(summary, "Mode: Summary (condensed information)")
+		dataLines = append(dataLines, "Video Summary:")
+		dataLines = append(dataLines, fmt.Sprintf("• Committee meetings: %d", committeeCount))
+		dataLines = append(dataLines, fmt.Sprintf("• Plenary sessions: %d", plenaryCount))
+		dataLines = append(dataLines, fmt.Sprintf("• Currently live: %d", liveCount))
+		dataLines = append(dataLines, fmt.Sprintf("• With streaming available: %d", streamingCount))
+		dataLines = append(dataLines, "")
+
+		// Show simplified video list - just title and date
+		dataLines = append(dataLines, fmt.Sprintf("Video List (%d-%d of %d):", offset+1, offset+len(videos), totalAfterFiltering))
+		for _, video := range videos {
+			title := "No title"
+			if video.Title != nil {
+				title = *video.Title
+				// Truncate long titles for summary
+				if len(title) > 50 {
+					title = title[:47] + "..."
+				}
+			}
+
+			dateStr := "No date"
+			if video.StartDateTime != nil {
+				dateStr = video.StartDateTime.Format("2006-01-02")
+			}
+
+			videoType := "Unknown"
+			if video.Type != nil {
+				videoType = *video.Type
+			}
+
+			dataLines = append(dataLines, fmt.Sprintf("• %s (%s) - %s", title, videoType, dateStr))
+		}
+	} else {
+		// Full mode: comprehensive content analysis and detailed listings
+		dataLines = append(dataLines, "Content Analysis:")
+		dataLines = append(dataLines, fmt.Sprintf("• Committee meetings: %d", committeeCount))
+		dataLines = append(dataLines, fmt.Sprintf("• Plenary sessions: %d", plenaryCount))
+		dataLines = append(dataLines, fmt.Sprintf("• Currently live: %d", liveCount))
+		dataLines = append(dataLines, fmt.Sprintf("• With streaming available: %d", streamingCount))
+		dataLines = append(dataLines, "")
+
+		// Show detailed video listings
+		dataLines = append(dataLines, fmt.Sprintf("Video Transmissions (%d-%d of %d):", offset+1, offset+len(videos), totalAfterFiltering))
+		for i, video := range videos {
+			title := "No title"
+			if video.Title != nil {
+				title = *video.Title
+				// Truncate long titles
+				if len(title) > 70 {
+					title = title[:67] + "..."
+				}
+			}
+
+			videoType := "Unknown type"
+			if video.Type != nil {
+				videoType = *video.Type
+			}
+
+			room := ""
+			if video.Room != nil {
+				room = fmt.Sprintf(" | %s", *video.Room)
+			}
+
+			committee := ""
+			if video.Committee != nil {
+				committee = fmt.Sprintf(" | %s", *video.Committee)
+			}
+
+			startTime := ""
+			if video.StartDateTime != nil {
+				startTime = fmt.Sprintf(" | %s", video.StartDateTime.Format("2006-01-02 15:04"))
+			}
+
+			status := ""
+			if video.StartDateTime != nil && video.EndDateTime == nil {
+				status = " [LIVE]"
+			} else if video.VideoLink != nil && *video.VideoLink != "" {
+				status = " [Available]"
+			} else {
+				status = " [Metadata only]"
+			}
+
+			unid := ""
+			if video.Unid != nil {
+				unid = *video.Unid
+				if len(unid) > 8 {
+					unid = unid[:8] + "..." // Shorten for readability
+				}
+			}
+
+			dataLines = append(dataLines, fmt.Sprintf("%d. %s (%s)%s%s%s%s",
+				offset+i+1, title, videoType, room, committee, startTime, status))
+			if unid != "" {
+				dataLines = append(dataLines, fmt.Sprintf("   ID: %s", unid))
+			}
+		}
 	}
 
-	summary += "\n\nUse sejm_get_video_details with a specific video ID (unid) to get streaming URLs and detailed metadata."
+	// Add pagination hints
+	if offset > 0 {
+		prevOffset := offset - limit
+		if prevOffset < 0 {
+			prevOffset = 0
+		}
+		nextActions = append(nextActions, fmt.Sprintf("Previous page: sejm_get_videos with offset='%d' and limit='%d'", prevOffset, limit))
+	}
 
-	return mcp.NewToolResultText(summary), nil
+	if offset + len(videos) < totalAfterFiltering {
+		nextOffset := offset + limit
+		nextActions = append(nextActions, fmt.Sprintf("Next page: sejm_get_videos with offset='%d' and limit='%d'", nextOffset, limit))
+	}
+
+	// Add summary mode toggle
+	if summaryOnly {
+		nextActions = append(nextActions, "Switch to detailed view: remove summary_only parameter or use summary_only='false'")
+	} else {
+		nextActions = append(nextActions, "Switch to summary view: add summary_only='true' for faster responses")
+	}
+
+	// Add smart filter suggestions
+	if !liveOnly && liveCount > 0 {
+		nextActions = append(nextActions, "Show only live streams: add live_only='true'")
+	}
+	if !hasVideoOnly && streamingCount > 0 {
+		nextActions = append(nextActions, "Show only videos with streaming: add has_video='true'")
+	}
+
+	// Add general actions
+	nextActions = append(nextActions, "Get video details: use sejm_get_video_details with specific unid")
+	nextActions = append(nextActions, "Today's videos: use sejm_get_videos_today for current activity")
+	nextActions = append(nextActions, "Committee filter: use committee parameter (e.g., committee='ENM')")
+
+	response := StandardResponse{
+		Operation:   "Parliamentary Video Transmissions",
+		Status:      "Retrieved Successfully",
+		Summary:     summary,
+		Data:        dataLines,
+		NextActions: nextActions,
+		Note:        fmt.Sprintf("Video data retrieved from term %d on %s. Use smart filters and pagination to manage large datasets efficiently.", term, time.Now().Format("2006-01-02 15:04:05 MST")),
+	}
+
+	return mcp.NewToolResultText(response.Format()), nil
 }
 
 func (s *SejmServer) handleGetVideosToday(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
