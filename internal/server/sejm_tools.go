@@ -334,6 +334,25 @@ func (s *SejmServer) registerSejmTools() {
 	}, s.handleGetMPDetails)
 
 	s.server.AddTool(mcp.Tool{
+		Name:        "sejm_get_mp_complete_profile",
+		Description: "Get comprehensive MP profile combining biographical information, voting statistics, and committee memberships in a single request. This composite endpoint reduces the number of API calls from 4+ to 1 for complete MP analysis. Returns detailed MP profile including personal information, political party affiliation, electoral district, voting statistics (attendance rates, participation patterns), committee memberships with roles and appointment dates, and performance metrics. Essential for journalists researching MPs, citizens evaluating their representatives, academics studying parliamentary behavior, and transparency organizations creating accountability dashboards. Provides complete MP overview for democratic oversight and political analysis.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"term": map[string]interface{}{
+					"type":        "string",
+					"description": "Parliamentary term number (1-10). Defaults to current term (10) if not specified. Different terms may have different MPs due to elections or mandate changes.",
+				},
+				"mp_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Unique MP identification number within the specified term. Get this ID from sejm_get_mps tool first. Each MP has a unique numeric ID that identifies them within their term (e.g., '1', '2', '123').",
+				},
+			},
+			Required: []string{"mp_id"},
+		},
+	}, s.handleGetMPCompleteProfile)
+
+	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_committees",
 		Description: "Retrieve complete list of parliamentary committees with their structure, membership, and operational details. Returns information about standing committees (komisje stałe - permanent, 29 in Term 10), extraordinary committees (komisje nadzwyczajne - special purpose), and investigative committees (komisje śledcze - parliamentary inquiry bodies). Committee membership reflects proportional representation from parliamentary clubs, with leadership positions distributed based on political strength. Key committees include UST (Legislative - reviews all bills for legal consistency), FPB (Public Finance - budget oversight), SPC (Justice - legal system oversight), SUE (EU Affairs - European legislation). Each committee entry includes official name, code, appointed members with their roles, scope of work, and subcommittees. Critical for understanding parliamentary workflow, policy expertise distribution, and cross-party cooperation patterns.",
 		InputSchema: mcp.ToolInputSchema{
@@ -1211,6 +1230,143 @@ func (s *SejmServer) handleGetMPDetails(ctx context.Context, request mcp.CallToo
 
 	result, _ := json.MarshalIndent(mp, "", "  ")
 	return mcp.NewToolResultText(fmt.Sprintf("%s\n\nComplete MP data:\n%s", description, string(result))), nil
+}
+
+func (s *SejmServer) handleGetMPCompleteProfile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	term, err := s.validateTerm(request.GetString("term", ""))
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid parliamentary term: %v. Please use term numbers 1-10.", err)), nil
+	}
+
+	mpID := request.GetString("mp_id", "")
+	if mpID == "" {
+		return mcp.NewToolResultError("MP ID is required. Please provide the mp_id parameter with a valid MP identification number. You can get MP IDs from the sejm_get_mps tool."), nil
+	}
+
+	// Composite data structure
+	type CompleteProfile struct {
+		MPDetails       *sejm.MP                    `json:"mpDetails"`
+		VotingStats     map[string]interface{}      `json:"votingStats,omitempty"`
+		Committees      []map[string]interface{}    `json:"committees,omitempty"`
+		ProfileSummary  string                      `json:"profileSummary"`
+		CallCount       int                         `json:"apiCallCount"`
+		GeneratedAt     string                      `json:"generatedAt"`
+	}
+
+	profile := &CompleteProfile{
+		CallCount:   0,
+		GeneratedAt: time.Now().Format("2006-01-02T15:04:05Z"),
+	}
+
+	// 1. Get MP Details
+	mpEndpoint := fmt.Sprintf("%s/sejm/term%d/MP/%s", sejmBaseURL, term, mpID)
+	mpData, err := s.makeAPIRequest(ctx, mpEndpoint, nil)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to retrieve MP details: %v. Please verify the MP ID (%s) exists in term %d.", err, mpID, term)), nil
+	}
+	profile.CallCount++
+
+	var mp sejm.MP
+	if err := json.Unmarshal(mpData, &mp); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse MP data: %v", err)), nil
+	}
+	profile.MPDetails = &mp
+
+	// 2. Get Voting Statistics
+	statsEndpoint := fmt.Sprintf("%s/sejm/term%d/MP/%s/votings/stats", sejmBaseURL, term, mpID)
+	if statsData, err := s.makeAPIRequest(ctx, statsEndpoint, nil); err == nil {
+		profile.CallCount++
+		var stats map[string]interface{}
+		if json.Unmarshal(statsData, &stats) == nil {
+			profile.VotingStats = stats
+		}
+	}
+
+	// 3. Get Committee Memberships by checking all committees
+	committeesEndpoint := fmt.Sprintf("%s/sejm/term%d/committees", sejmBaseURL, term)
+	if committeesData, err := s.makeAPIRequest(ctx, committeesEndpoint, nil); err == nil {
+		profile.CallCount++
+		var committees []sejm.Committee
+		if json.Unmarshal(committeesData, &committees) == nil {
+			// Find committees where this MP is a member
+			for _, committee := range committees {
+				if committee.Members != nil {
+					for _, member := range *committee.Members {
+						if member.Id != nil && mpID == fmt.Sprintf("%d", *member.Id) {
+							committeeInfo := map[string]interface{}{
+								"code": committee.Code,
+								"name": committee.Name,
+								"type": committee.Type,
+								"role": member.Function,
+								"mandateExpired": member.MandateExpired,
+							}
+							profile.Committees = append(profile.Committees, committeeInfo)
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// Build comprehensive summary
+	fullName := getFullName(mp)
+	summary := fmt.Sprintf("Complete profile for MP %s (ID: %s) from term %d:\n", fullName, mpID, term)
+
+	// Basic info
+	if mp.Club != nil {
+		summary += fmt.Sprintf("• Political Party: %s\n", *mp.Club)
+	}
+	if mp.DistrictName != nil {
+		summary += fmt.Sprintf("• Electoral District: %s\n", *mp.DistrictName)
+	}
+	if mp.Active != nil {
+		status := "Active"
+		if !*mp.Active {
+			status = "Inactive"
+		}
+		summary += fmt.Sprintf("• Status: %s\n", status)
+	}
+
+	// Voting statistics summary
+	if profile.VotingStats != nil {
+		summary += "\nVoting Performance:\n"
+		if present, ok := profile.VotingStats["present"].(float64); ok {
+			summary += fmt.Sprintf("• Voting Sessions Attended: %.0f\n", present)
+		}
+		if absent, ok := profile.VotingStats["absent"].(float64); ok {
+			summary += fmt.Sprintf("• Sessions Missed: %.0f\n", absent)
+		}
+		if excuse, ok := profile.VotingStats["excuse"].(float64); ok {
+			summary += fmt.Sprintf("• Excused Absences: %.0f\n", excuse)
+		}
+	}
+
+	// Committee memberships summary
+	if len(profile.Committees) > 0 {
+		summary += fmt.Sprintf("\nCommittee Memberships (%d):\n", len(profile.Committees))
+		for _, comm := range profile.Committees {
+			name := "Unknown Committee"
+			if n, ok := comm["name"].(*string); ok && n != nil {
+				name = *n
+			}
+			role := "Member"
+			if r, ok := comm["role"].(*string); ok && r != nil {
+				role = *r
+			}
+			summary += fmt.Sprintf("• %s (%s)\n", name, role)
+		}
+	} else {
+		summary += "\nCommittee Memberships: None found\n"
+	}
+
+	summary += fmt.Sprintf("\nData retrieved with %d API calls (reduced from typical 4+ calls)\n", profile.CallCount)
+
+	profile.ProfileSummary = summary
+
+	// Return formatted response
+	result, _ := json.MarshalIndent(profile, "", "  ")
+	return mcp.NewToolResultText(fmt.Sprintf("%s\n\nComplete Profile Data:\n%s", summary, string(result))), nil
 }
 
 func getFullName(mp sejm.MP) string {
