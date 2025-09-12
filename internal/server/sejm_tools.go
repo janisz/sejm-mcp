@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -284,6 +285,26 @@ func (s *SejmServer) registerSejmTools() {
 				"term": map[string]interface{}{
 					"type":        "string",
 					"description": "Parliamentary term number (1-10). Each term lasts 4 years. Term 10 is current (2019-2023). Term 9 was 2015-2019, Term 8 was 2011-2015, etc. If not specified, defaults to current term (10). Use '10' for most recent data.",
+				},
+				"limit": map[string]interface{}{
+					"type":        "string",
+					"description": "Maximum number of MPs to return (default: 50, max: 500). Term 10 has 498 MPs total. Use higher values for comprehensive analysis, lower for focused research.",
+				},
+				"offset": map[string]interface{}{
+					"type":        "string",
+					"description": "Number of MPs to skip for pagination (default: 0). Use with limit for browsing large MP lists. Example: offset='100' with limit='50' shows MPs 101-150.",
+				},
+				"club": map[string]interface{}{
+					"type":        "string",
+					"description": "Filter by parliamentary club/party (e.g., 'PiS', 'KO', 'Lewica', 'PSL-TD', 'Polska2050-TD', 'Konfederacja'). Shows only MPs from specified political grouping.",
+				},
+				"active": map[string]interface{}{
+					"type":        "string",
+					"description": "Filter by MP status: 'true' for active MPs only, 'false' for inactive, empty for all. Active MPs are currently serving in parliament.",
+				},
+				"last_name": map[string]interface{}{
+					"type":        "string",
+					"description": "Filter by MP last name (case-insensitive partial match). Examples: 'Kowal' finds Kowalski, 'Tusk' finds Donald Tusk. Useful for finding specific MPs or name patterns.",
 				},
 			},
 		},
@@ -891,6 +912,23 @@ func (s *SejmServer) handleGetMPs(ctx context.Context, request mcp.CallToolReque
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid parliamentary term: %v. Please use term numbers 1-10, where 10 is the current term (2019-2023), 9 was 2015-2019, etc.", err)), nil
 	}
 
+	// Parse pagination and filter parameters
+	limitStr := request.GetString("limit", "50")
+	offsetStr := request.GetString("offset", "0")
+	clubFilter := request.GetString("club", "")
+	activeFilter := request.GetString("active", "")
+	lastNameFilter := strings.ToLower(request.GetString("last_name", ""))
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 || limit > 500 {
+		limit = 50
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
 	endpoint := fmt.Sprintf("%s/sejm/term%d/MP", sejmBaseURL, term)
 	data, err := s.makeAPIRequest(ctx, endpoint, nil)
 	if err != nil {
@@ -918,23 +956,61 @@ func (s *SejmServer) handleGetMPs(ctx context.Context, request mcp.CallToolReque
 	}
 
 	var mpSummaries []MPSummary
+	var filteredMPs []sejm.MP
 
+	// Apply filters first
 	for _, mp := range mps {
+		// Calculate stats for all MPs regardless of filters
 		if mp.Active != nil && *mp.Active {
 			activeCount++
 		}
-
-		// Count party affiliations
 		if mp.Club != nil {
 			partyStats[*mp.Club]++
 		}
-
-		// Count districts
 		if mp.DistrictName != nil {
 			districtStats[*mp.DistrictName]++
 		}
 
-		// Create summary entry
+		// Apply filters
+		if clubFilter != "" && (mp.Club == nil || *mp.Club != clubFilter) {
+			continue
+		}
+
+		if activeFilter != "" {
+			isActive := mp.Active != nil && *mp.Active
+			if (activeFilter == "true" && !isActive) || (activeFilter == "false" && isActive) {
+				continue
+			}
+		}
+
+		if lastNameFilter != "" {
+			lastName := ""
+			if mp.LastName != nil {
+				lastName = strings.ToLower(*mp.LastName)
+			}
+			if !strings.Contains(lastName, lastNameFilter) {
+				continue
+			}
+		}
+
+		filteredMPs = append(filteredMPs, mp)
+	}
+
+	// Apply pagination to filtered results
+	totalFiltered := len(filteredMPs)
+	start := offset
+	end := offset + limit
+	if start >= totalFiltered {
+		start = totalFiltered
+		end = totalFiltered
+	} else if end > totalFiltered {
+		end = totalFiltered
+	}
+
+	paginatedMPs := filteredMPs[start:end]
+
+	// Create summaries for paginated results
+	for _, mp := range paginatedMPs {
 		name := getFullName(mp)
 		mpSummaries = append(mpSummaries, MPSummary{
 			ID:           mp.Id,
@@ -948,33 +1024,77 @@ func (s *SejmServer) handleGetMPs(ctx context.Context, request mcp.CallToolReque
 
 	summary := fmt.Sprintf("Parliamentary term %d MP overview:\n", term)
 	summary += fmt.Sprintf("- Total MPs: %d (%d active, %d inactive)\n", len(mps), activeCount, len(mps)-activeCount)
+
+	// Add filter information
+	if clubFilter != "" || activeFilter != "" || lastNameFilter != "" {
+		var filters []string
+		if clubFilter != "" {
+			filters = append(filters, fmt.Sprintf("club: %s", clubFilter))
+		}
+		if activeFilter != "" {
+			filters = append(filters, fmt.Sprintf("active: %s", activeFilter))
+		}
+		if lastNameFilter != "" {
+			filters = append(filters, fmt.Sprintf("last_name: %s", lastNameFilter))
+		}
+		summary += fmt.Sprintf("- Filtered by: %s\n", strings.Join(filters, ", "))
+		summary += fmt.Sprintf("- Matching MPs: %d\n", totalFiltered)
+	}
+
+	summary += fmt.Sprintf("- Showing: %d-%d of %d %s\n", start+1, end, totalFiltered, func() string {
+		if clubFilter != "" || activeFilter != "" || lastNameFilter != "" { return "filtered MPs" } else { return "total MPs" }
+	}())
 	summary += "- Use sejm_get_mp_details with specific mp_id to get full details about any MP\n\n"
 
 	// Add party breakdown
-	summary += "Party composition:\n"
+	summary += "Party composition (all MPs):\n"
 	for party, count := range partyStats {
 		summary += fmt.Sprintf("- %s: %d MPs\n", party, count)
 	}
 
-	// Show first 20 MPs as examples
-	summary += "\nFirst 20 MPs (use mp_id with sejm_get_mp_details for full info):\n"
-	for i, mp := range mpSummaries {
-		if i >= 20 {
-			break
+	// Show paginated MPs
+	if len(mpSummaries) == 0 {
+		summary += "\nNo MPs found matching the current filters.\n"
+	} else {
+		summary += fmt.Sprintf("\nMPs %d-%d (use mp_id with sejm_get_mp_details for full info):\n", start+1, end)
+		for _, mp := range mpSummaries {
+			activeStatus := "inactive"
+			if mp.Active != nil && *mp.Active {
+				activeStatus = "active"
+			}
+			party := "No party"
+			if mp.Party != nil {
+				party = *mp.Party
+			}
+			summary += fmt.Sprintf("- ID %v: %s (%s) - %s\n", *mp.ID, mp.Name, party, activeStatus)
 		}
-		activeStatus := "inactive"
-		if mp.Active != nil && *mp.Active {
-			activeStatus = "active"
-		}
-		party := "No party"
-		if mp.Party != nil {
-			party = *mp.Party
-		}
-		summary += fmt.Sprintf("- ID %v: %s (%s) - %s\n", *mp.ID, mp.Name, party, activeStatus)
 	}
 
-	if len(mpSummaries) > 20 {
-		summary += fmt.Sprintf("\n... and %d more MPs. Use sejm_get_mp_details with specific IDs for details.\n", len(mpSummaries)-20)
+	// Add pagination navigation hints
+	if totalFiltered > end {
+		remaining := totalFiltered - end
+		summary += fmt.Sprintf("\n... %d more MPs available (use offset=%d to continue)\n", remaining, end)
+	}
+
+	// Add navigation actions
+	var navigationHints []string
+	if offset > 0 {
+		prevOffset := offset - limit
+		if prevOffset < 0 {
+			prevOffset = 0
+		}
+		navigationHints = append(navigationHints, fmt.Sprintf("Previous page: offset=%d limit=%d", prevOffset, limit))
+	}
+
+	if end < totalFiltered {
+		navigationHints = append(navigationHints, fmt.Sprintf("Next page: offset=%d limit=%d", end, limit))
+	}
+
+	if len(navigationHints) > 0 {
+		summary += "\nNavigation:\n"
+		for _, hint := range navigationHints {
+			summary += fmt.Sprintf("- %s\n", hint)
+		}
 	}
 
 	return mcp.NewToolResultText(summary), nil
