@@ -452,7 +452,7 @@ func (s *SejmServer) registerELITools() {
 			Properties: map[string]interface{}{
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of acts to return (default: 50, max: 500). Use higher values for comprehensive listings.",
+					"description": "Maximum number of acts to return (default: 30, max: 500). Use higher values for comprehensive listings, but be aware of context limits.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
@@ -474,7 +474,7 @@ func (s *SejmServer) registerELITools() {
 				},
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of acts to return (default: 100). Use higher values for comprehensive publisher analysis.",
+					"description": "Maximum number of acts to return (default: 30). Use higher values for comprehensive publisher analysis, but be aware of context limits.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
@@ -501,7 +501,7 @@ func (s *SejmServer) registerELITools() {
 				},
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of acts to return (default: 100). Use higher values for comprehensive yearly analysis.",
+					"description": "Maximum number of acts to return (default: 30). Use higher values for comprehensive yearly analysis, but be aware of context limits.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
@@ -2321,7 +2321,7 @@ func (s *SejmServer) handleListActs(ctx context.Context, request mcp.CallToolReq
 	// Use the search endpoint to list acts with pagination
 	params := make(map[string]string)
 
-	limit := request.GetString("limit", "50")
+	limit := request.GetString("limit", "30")
 	params["limit"] = limit
 
 	offset := request.GetString("offset", "0")
@@ -2408,7 +2408,7 @@ func (s *SejmServer) handleGetActsByPublisher(ctx context.Context, request mcp.C
 	// Use search endpoint to get acts by publisher with pagination
 	params := make(map[string]string)
 	params["publisher"] = publisher
-	limit := request.GetString("limit", "100")
+	limit := request.GetString("limit", "30")
 	params["limit"] = limit
 
 	offset := request.GetString("offset", "0")
@@ -2520,7 +2520,7 @@ func (s *SejmServer) handleGetActsByYear(ctx context.Context, request mcp.CallTo
 	}
 
 	params := make(map[string]string)
-	limit := request.GetString("limit", "100")
+	limit := request.GetString("limit", "30")
 	params["limit"] = limit
 
 	offset := request.GetString("offset", "0")

@@ -97,7 +97,7 @@ func (s *SejmServer) registerSejmTools() {
 				},
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of written questions to return (default: 50). Use higher values (e.g., '100', '200', '500') for comprehensive oversight analysis, lower values for recent activity overview.",
+					"description": "Maximum number of written questions to return (default: 20). Use higher values (e.g., '50', '100') for comprehensive oversight analysis, but be aware of context limits.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
@@ -182,7 +182,7 @@ func (s *SejmServer) registerSejmTools() {
 				},
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of proceedings to return (default: 50). Use higher values for comprehensive analysis.",
+					"description": "Maximum number of proceedings to return (default: 20). Use higher values for comprehensive analysis but be aware of context limits.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
@@ -219,7 +219,7 @@ func (s *SejmServer) registerSejmTools() {
 				},
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of prints to return (default: 100). Use higher values for comprehensive legislative analysis.",
+					"description": "Maximum number of prints to return (default: 30). Use higher values for comprehensive legislative analysis, but be aware of context limits.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
@@ -391,7 +391,7 @@ func (s *SejmServer) registerSejmTools() {
 				},
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of interpellations to return (default: 50). Use higher values (e.g., '100', '200', '500') for comprehensive oversight analysis, lower values for recent activity overview. Large datasets useful for trend analysis and accountability studies.",
+					"description": "Maximum number of interpellations to return (default: 20). Use higher values (e.g., '50', '100') for comprehensive oversight analysis, but be aware of context limits. Large datasets useful for trend analysis and accountability studies.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
@@ -769,7 +769,7 @@ func (s *SejmServer) registerSejmTools() {
 				},
 				"limit": map[string]interface{}{
 					"type":        "string",
-					"description": "Maximum number of videos to return (default: 50, max: 500). Use higher values for comprehensive searches, lower for quick overviews.",
+					"description": "Maximum number of videos to return (default: 20, max: 500). Use higher values for comprehensive searches, but be aware of context limits.",
 				},
 				"offset": map[string]interface{}{
 					"type":        "string",
@@ -1645,7 +1645,7 @@ func (s *SejmServer) handleGetProceedings(ctx context.Context, request mcp.CallT
 	}
 
 	params := make(map[string]string)
-	limit := request.GetString("limit", "50")
+	limit := request.GetString("limit", "20")
 	params["limit"] = limit
 
 	endpoint := fmt.Sprintf("%s/sejm/term%d/proceedings", sejmBaseURL, term)
@@ -1707,7 +1707,7 @@ func (s *SejmServer) handleGetPrints(ctx context.Context, request mcp.CallToolRe
 	}
 
 	params := make(map[string]string)
-	limit := request.GetString("limit", "100")
+	limit := request.GetString("limit", "30")
 	params["limit"] = limit
 
 	if offset := request.GetString("offset", ""); offset != "" {
@@ -2445,7 +2445,7 @@ func (s *SejmServer) handleGetVideos(ctx context.Context, request mcp.CallToolRe
 	if limit := request.GetString("limit", ""); limit != "" {
 		params["limit"] = limit
 	} else {
-		params["limit"] = "50" // Default limit
+		params["limit"] = "20" // Default limit
 	}
 	if offset := request.GetString("offset", ""); offset != "" {
 		params["offset"] = offset
@@ -4347,9 +4347,44 @@ func (s *SejmServer) handleGetCurrentProceeding(ctx context.Context, request mcp
 		summary = append(summary, fmt.Sprintf("Status: %s", status))
 	}
 
-	// Add complete details
-	proceedingJSON, _ := json.MarshalIndent(proceeding, "", "  ")
-	results = append(results, string(proceedingJSON))
+	// Add essential proceeding details (compact format to avoid large responses)
+	if proceeding.Title != nil {
+		results = append(results, fmt.Sprintf("Title: %s", *proceeding.Title))
+	}
+
+	if proceeding.Dates != nil && len(*proceeding.Dates) > 0 {
+		dates := *proceeding.Dates
+		if len(dates) == 1 {
+			results = append(results, fmt.Sprintf("Date: %s", dates[0].Format("2006-01-02")))
+		} else {
+			dateStrs := make([]string, len(dates))
+			for i, date := range dates {
+				dateStrs[i] = date.Format("2006-01-02")
+			}
+			results = append(results, fmt.Sprintf("Dates: %s (%d days)", strings.Join(dateStrs, ", "), len(dates)))
+		}
+	}
+
+	if proceeding.Current != nil {
+		if *proceeding.Current {
+			results = append(results, "Status: Currently active proceeding")
+		} else {
+			results = append(results, "Status: Proceeding completed")
+		}
+	}
+
+	// Show agenda if available (but not full details to keep response small)
+	if proceeding.Agenda != nil && *proceeding.Agenda != "" {
+		agenda := *proceeding.Agenda
+		// If agenda is very long, truncate it
+		if len(agenda) > 200 {
+			agenda = agenda[:200] + "..."
+		}
+		results = append(results, fmt.Sprintf("Agenda: %s", agenda))
+		results = append(results, "💡 Use sejm_get_transcripts to view detailed proceedings and full agenda")
+	} else {
+		results = append(results, "Agenda: No agenda information available")
+	}
 
 	// Suggest next actions
 	nextActions = append(nextActions, fmt.Sprintf("View all proceedings: sejm_get_proceedings with term='%s'", term))
