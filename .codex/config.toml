@@ -1,0 +1,4 @@
+[mcp_servers.sejm_mcp]
+command = "docker"
+args = [ "run", "-i", "--rm", "ghcr.io/janisz/sejm-mcp:latest" ]
+

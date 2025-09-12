@@ -2033,7 +2033,7 @@ func (s *SejmServer) handleGetParliamentaryKeywords(ctx context.Context, request
 		"government_positions": {
 			"premier", "wicepremier", "minister", "wiceminister",
 			"sekretarz stanu", "podsekretarz stanu", "prezes",
-			"prezes Rady Ministrów", "prezydent", "marszałek Sejmu",
+			"prezes Rady Ministrów", "prezydent", "marszałek Sejmu", // nolint:misspell
 			"marszałek Senatu", "prezes TK", "Rzecznik Praw Obywatelskich",
 			"prezes NIK", "prezes NBP", "przewodniczący KNF",
 			"główny inspektor", "komendant główny", "dyrektor generalny",
@@ -2048,7 +2048,7 @@ func (s *SejmServer) handleGetParliamentaryKeywords(ctx context.Context, request
 		for cat, words := range keywords {
 			filteredWords := filterKeywords(words, filter)
 			if len(filteredWords) > 0 {
-				summary.WriteString(fmt.Sprintf("=== %s ===\n", strings.ToUpper(strings.Replace(cat, "_", " ", -1))))
+				summary.WriteString(fmt.Sprintf("=== %s ===\n", strings.ToUpper(strings.ReplaceAll(cat, "_", " "))))
 				for _, word := range filteredWords {
 					summary.WriteString(fmt.Sprintf("• %s\n", word))
 				}
@@ -2058,7 +2058,7 @@ func (s *SejmServer) handleGetParliamentaryKeywords(ctx context.Context, request
 		}
 	} else if words, exists := keywords[category]; exists {
 		filteredWords := filterKeywords(words, filter)
-		summary.WriteString(fmt.Sprintf("Keywords for %s:\n\n", strings.Replace(category, "_", " ", -1)))
+		summary.WriteString(fmt.Sprintf("Keywords for %s:\n\n", strings.ReplaceAll(category, "_", " ")))
 		for _, word := range filteredWords {
 			summary.WriteString(fmt.Sprintf("• %s\n", word))
 		}
