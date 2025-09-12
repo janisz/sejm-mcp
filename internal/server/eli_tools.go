@@ -1533,8 +1533,10 @@ func (s *SejmServer) handleSearchActContent(ctx context.Context, request mcp.Cal
 		data = append(data, "• Check spelling of Polish legal terms")
 		data = append(data, "• Use partial words (e.g., 'konstytuc' instead of 'konstytucja')")
 		data = append(data, "• Try searching for article numbers (e.g., 'art. 15', 'artykuł 20')")
+		data = append(data, "• Use eli_get_keywords to discover available legal keywords")
 
 		nextActions = append(nextActions, "Try different search terms")
+		nextActions = append(nextActions, "Use eli_get_keywords for legal terminology suggestions")
 		nextActions = append(nextActions, "Use eli_get_act_text with show_page_info='true' to explore document structure")
 		nextActions = append(nextActions, "Search for common legal terms like 'artykuł', 'ustęp', 'punkt'")
 	} else {
@@ -2071,8 +2073,10 @@ func (s *SejmServer) searchPDFContent(ctx context.Context, pdfData []byte, docum
 		data = append(data, "• Check spelling of Polish terms")
 		data = append(data, "• Use partial words (e.g., 'Kowal' instead of 'Kowalski')")
 		data = append(data, "• Try searching for common voting terms like 'za', 'przeciw', 'wstrzymał'")
+		data = append(data, "• Use sejm_get_parliamentary_keywords to discover effective search terms")
 
 		nextActions = append(nextActions, "Try different search terms")
+		nextActions = append(nextActions, "Use sejm_get_parliamentary_keywords for suggested keywords")
 		nextActions = append(nextActions, "Use broader search terms")
 	} else {
 		data = append(data, "Search Results by Term:")

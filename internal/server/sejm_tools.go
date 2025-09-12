@@ -549,6 +549,59 @@ func (s *SejmServer) registerSejmTools() {
 	}, s.handleGetStatement)
 
 	s.server.AddTool(mcp.Tool{
+		Name:        "sejm_search_transcript_content",
+		Description: "Search for specific text within parliamentary proceeding transcripts and get precise page locations. Downloads transcript PDFs, searches for specified terms, and returns detailed map showing exactly which pages contain each search term. Perfect for quickly locating specific MPs, debate topics, or policy discussions within large transcript documents without reading the entire text. IMPORTANT: Parliamentary proceedings can span multiple days - to find all mentions of a keyword across an entire proceeding, you need to search each day's transcript separately by iterating through all dates of the proceeding.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"term": map[string]interface{}{
+					"type":        "string",
+					"description": "Parliamentary term number (1-10). Current term 10 covers 2019-2023.",
+				},
+				"proceeding_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Parliamentary proceeding/sitting number. Must match exactly with the transcript document.",
+				},
+				"date": map[string]interface{}{
+					"type":        "string",
+					"description": "Proceeding date in YYYY-MM-DD format. IMPORTANT: Proceedings often span multiple days. Use sejm_get_proceedings to see all dates for a proceeding, then search each date separately.",
+				},
+				"search_terms": map[string]interface{}{
+					"type":        "string",
+					"description": "Search terms separated by commas. Can include MP names, party names, policy topics, or any text. Examples: 'Kowalski,PiS,budżet' or 'konstytucja,reforma,sądownictwo'. Case-insensitive search with Polish character support.",
+				},
+				"context_chars": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional. Number of characters to show around each match for context (default: 100, max: 500).",
+				},
+				"max_matches_per_term": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional. Maximum number of matches to show per search term (default: 10, max: 50).",
+				},
+			},
+			Required: []string{"proceeding_id", "date", "search_terms"},
+		},
+	}, s.handleSearchTranscriptContent)
+
+	s.server.AddTool(mcp.Tool{
+		Name:        "sejm_get_parliamentary_keywords",
+		Description: "Get comprehensive list of common parliamentary and political keywords for Polish Sejm searches. Returns suggested search terms for parliamentary transcripts, voting records, and political discourse. Essential for discovering effective search terms when you're unsure what keywords to use for parliamentary content search. Use this when searches return no results or when you need guidance on parliamentary terminology.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"category": map[string]interface{}{
+					"type":        "string",
+					"description": "Filter keywords by category: 'political_parties' for party names and abbreviations, 'policy_topics' for common policy areas, 'parliamentary_terms' for procedural terminology, 'voting_terms' for voting-related words, 'government_positions' for ministerial and official titles, or 'all' for comprehensive list (default).",
+				},
+				"filter": map[string]interface{}{
+					"type":        "string",
+					"description": "Filter keywords containing specific text (case-insensitive). Example: 'budżet' to find budget-related keywords, 'sąd' for court/justice keywords.",
+				},
+			},
+		},
+	}, s.handleGetParliamentaryKeywords)
+
+	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_committee_sittings_by_date",
 		Description: "Retrieve list of committee meetings scheduled for a specific date across all committees. Returns comprehensive information about parliamentary committee activities including meeting times, rooms, agendas, and committee codes. Essential for tracking daily parliamentary committee work, scheduling analysis, and understanding committee activity patterns. Use this to see all committee meetings happening on a particular day.",
 		InputSchema: mcp.ToolInputSchema{
@@ -1679,6 +1732,18 @@ func (s *SejmServer) handleGetProceedings(ctx context.Context, request mcp.CallT
 	}
 
 	summary := fmt.Sprintf("Parliamentary Proceedings for Term %d (most recent first):\n\n", term)
+	summary += "⚠️  IMPORTANT: Proceedings often span multiple days. When searching transcripts, you must search each day separately using sejm_search_transcript_content.\n\n"
+
+	multiDayCount := 0
+	for _, proc := range proceedings {
+		if proc.Dates != nil && len(*proc.Dates) > 1 {
+			multiDayCount++
+		}
+	}
+	if multiDayCount > 0 {
+		summary += fmt.Sprintf("📅 Multi-day proceedings found: %d out of %d proceedings span multiple days.\n\n", multiDayCount, len(proceedings))
+	}
+
 	for i, proceeding := range proceedings {
 		if i >= 20 { // Limit displayed entries
 			summary += fmt.Sprintf("... and %d more proceedings\n", len(proceedings)-i)
@@ -1688,9 +1753,21 @@ func (s *SejmServer) handleGetProceedings(ctx context.Context, request mcp.CallT
 		if proceeding.Number != nil {
 			summary += fmt.Sprintf("Proceeding %d:\n", *proceeding.Number)
 		}
+
+		// Show ALL dates for multi-day proceedings
 		if proceeding.Dates != nil && len(*proceeding.Dates) > 0 {
-			summary += fmt.Sprintf("  Date: %s\n", (*proceeding.Dates)[0])
+			if len(*proceeding.Dates) == 1 {
+				summary += fmt.Sprintf("  Date: %s\n", (*proceeding.Dates)[0].Format("2006-01-02"))
+			} else {
+				summary += fmt.Sprintf("  Dates: %s", (*proceeding.Dates)[0].Format("2006-01-02"))
+				for j := 1; j < len(*proceeding.Dates); j++ {
+					summary += fmt.Sprintf(", %s", (*proceeding.Dates)[j].Format("2006-01-02"))
+				}
+				summary += fmt.Sprintf(" (%d days)\n", len(*proceeding.Dates))
+				summary += "    💡 Search each date separately with sejm_search_transcript_content\n"
+			}
 		}
+
 		if proceeding.Title != nil {
 			summary += fmt.Sprintf("  Title: %s\n", *proceeding.Title)
 		}
@@ -1856,6 +1933,173 @@ func (s *SejmServer) handleGetStatement(ctx context.Context, request mcp.CallToo
 
 	// Handle HTML chunking for large responses
 	return s.chunkHTMLContent(string(data), fmt.Sprintf("Statement %s from proceeding %s on %s", statementNum, proceedingID, date), chunkSize, chunkNumber, showChunkInfo)
+}
+
+func (s *SejmServer) handleSearchTranscriptContent(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	term, err := s.validateTerm(request.GetString("term", ""))
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid parliamentary term: %v. Please use term numbers 1-10.", err)), nil
+	}
+
+	proceedingID := request.GetString("proceeding_id", "")
+	date := request.GetString("date", "")
+	searchTerms := request.GetString("search_terms", "")
+	contextChars := request.GetString("context_chars", "100")
+	maxMatchesPerTerm := request.GetString("max_matches_per_term", "10")
+
+	if proceedingID == "" || date == "" || searchTerms == "" {
+		return mcp.NewToolResultError("Parameters 'proceeding_id', 'date', and 'search_terms' are all required."), nil
+	}
+
+	// Parse parameters similar to other search functions
+	contextCharsInt := 100
+	if contextChars != "" {
+		if parsed, err := fmt.Sscanf(contextChars, "%d", &contextCharsInt); parsed == 1 && err == nil {
+			if contextCharsInt > 500 {
+				contextCharsInt = 500
+			} else if contextCharsInt < 20 {
+				contextCharsInt = 20
+			}
+		}
+	}
+
+	maxMatchesInt := 10
+	if maxMatchesPerTerm != "" {
+		if parsed, err := fmt.Sscanf(maxMatchesPerTerm, "%d", &maxMatchesInt); parsed == 1 && err == nil {
+			if maxMatchesInt > 50 {
+				maxMatchesInt = 50
+			} else if maxMatchesInt < 1 {
+				maxMatchesInt = 1
+			}
+		}
+	}
+
+	// Download the PDF transcript
+	pdfEndpoint := fmt.Sprintf("%s/sejm/term%d/proceedings/%s/%s/transcripts/pdf", sejmBaseURL, term, proceedingID, date)
+	pdfData, err := s.makeTextRequest(ctx, pdfEndpoint, "pdf")
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to retrieve PDF transcript for search: %v. This proceeding may not have a PDF transcript available for date %s.", err, date)), nil
+	}
+
+	// Use the same search logic as other PDF content searches
+	return s.searchPDFContent(ctx, pdfData, fmt.Sprintf("transcript proceeding-%s date-%s", proceedingID, date), searchTerms, contextCharsInt, maxMatchesInt)
+}
+
+func (s *SejmServer) handleGetParliamentaryKeywords(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	category := request.GetString("category", "all")
+	filter := strings.ToLower(request.GetString("filter", ""))
+
+	// Define comprehensive keyword categories
+	keywords := map[string][]string{
+		"political_parties": {
+			"PiS", "Prawo i Sprawiedliwość", "PO", "Platforma Obywatelska",
+			"Lewica", "PSL", "Polskie Stronnictwo Ludowe", "Konfederacja",
+			"Kukiz'15", "Polska 2050", "Koalicja Obywatelska", "KO",
+			"Zjednoczona Prawica", "SLD", "Sojusz Lewicy Demokratycznej",
+			"Wiosna", "Razem", "Porozumienie", "Solidarna Polska",
+		},
+		"policy_topics": {
+			"budżet", "podatki", "finanse", "gospodarka", "ekonomia",
+			"zdrowie", "ochrona zdrowia", "NFZ", "szpitale", "pandemia",
+			"edukacja", "szkoły", "uniwersytety", "nauczyciele", "studenci",
+			"środowisko", "klimat", "energia", "OZE", "węgiel", "atom",
+			"rolnictwo", "dopłaty", "ARiMR", "żywność", "bezpieczeństwo żywnościowe",
+			"infrastruktura", "transport", "drogi", "kolej", "lotnictwo",
+			"mieszkalnictwo", "budownictwo", "kredyty", "mieszkanie plus",
+			"emerytury", "renty", "ZUS", "praca", "zatrudnienie", "bezrobocie",
+			"rodzina", "500+", "demografa", "dzietność", "opieka",
+			"bezpieczeństwo", "wojsko", "NATO", "UE", "Unia Europejska",
+			"sądownictwo", "reforma sądów", "prokuratura", "TK",
+			"media", "TVP", "Polsat", "TVN", "radiofonia",
+		},
+		"parliamentary_terms": {
+			"posiedzenie", "komisja", "podkomisja", "zespół",
+			"głosowanie", "projekt ustawy", "ustawa", "nowelizacja",
+			"druk", "interpelacja", "zapytanie", "oświadczenie",
+			"porządek obrad", "punkt", "przerwa", "odroczenie",
+			"czytanie", "pierwsze", "drugie", "trzecie",
+			"poprawka", "wniosek", "sprawozdanie", "opinię",
+			"debata", "dyskusja", "wystąpienie", "głos",
+			"marszałek", "wicemarszałek", "przewodniczący", "sprawozdawca",
+			"stenogram", "protokół", "transmisja", "nagranie",
+		},
+		"voting_terms": {
+			"za", "przeciw", "wstrzymał się", "nie głosował",
+			"obecny", "nieobecny", "usprawiedliwiony",
+			"większość", "jednomyślnie", "głosami", "przy głosach",
+			"odrzucony", "przyjęty", "uchwalony", "przegłosowany",
+			"kworum", "liczba głosów", "wynik", "poparcie",
+		},
+		"government_positions": {
+			"premier", "wicepremier", "minister", "wiceminister",
+			"sekretarz stanu", "podsekretarz stanu", "prezes",
+			"prezes Rady Ministrów", "prezydent", "marszałek Sejmu",
+			"marszałek Senatu", "prezes TK", "Rzecznik Praw Obywatelskich",
+			"prezes NIK", "prezes NBP", "przewodniczący KNF",
+			"główny inspektor", "komendant główny", "dyrektor generalny",
+		},
+	}
+
+	var result []string
+	var summary strings.Builder
+
+	if category == "all" {
+		summary.WriteString("Parliamentary Keywords by Category:\n\n")
+		for cat, words := range keywords {
+			filteredWords := filterKeywords(words, filter)
+			if len(filteredWords) > 0 {
+				summary.WriteString(fmt.Sprintf("=== %s ===\n", strings.ToUpper(strings.Replace(cat, "_", " ", -1))))
+				for _, word := range filteredWords {
+					summary.WriteString(fmt.Sprintf("• %s\n", word))
+				}
+				summary.WriteString("\n")
+				result = append(result, filteredWords...)
+			}
+		}
+	} else if words, exists := keywords[category]; exists {
+		filteredWords := filterKeywords(words, filter)
+		summary.WriteString(fmt.Sprintf("Keywords for %s:\n\n", strings.Replace(category, "_", " ", -1)))
+		for _, word := range filteredWords {
+			summary.WriteString(fmt.Sprintf("• %s\n", word))
+		}
+		result = filteredWords
+	} else {
+		availableCategories := make([]string, 0, len(keywords))
+		for cat := range keywords {
+			availableCategories = append(availableCategories, cat)
+		}
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid category '%s'. Available categories: %s", category, strings.Join(availableCategories, ", "))), nil
+	}
+
+	if filter != "" && len(result) == 0 {
+		summary.WriteString(fmt.Sprintf("No keywords found matching filter '%s'.\n\n", filter))
+		summary.WriteString("💡 Suggestions:\n")
+		summary.WriteString("• Try using sejm_get_parliamentary_keywords without filter to see all available keywords\n")
+		summary.WriteString("• Check spelling of the filter term\n")
+		summary.WriteString("• Try broader filter terms\n")
+	}
+
+	summary.WriteString(fmt.Sprintf("\n📊 Total keywords found: %d\n", len(result)))
+	summary.WriteString("\n💡 Usage tips:\n")
+	summary.WriteString("• Use these keywords in sejm_search_transcript_content, sejm_search_voting_content\n")
+	summary.WriteString("• Combine multiple keywords with commas (e.g., 'budżet,podatki,PiS')\n")
+	summary.WriteString("• Keywords are case-insensitive and support Polish characters\n")
+
+	return mcp.NewToolResultText(summary.String()), nil
+}
+
+func filterKeywords(keywords []string, filter string) []string {
+	if filter == "" {
+		return keywords
+	}
+
+	var filtered []string
+	for _, keyword := range keywords {
+		if strings.Contains(strings.ToLower(keyword), filter) {
+			filtered = append(filtered, keyword)
+		}
+	}
+	return filtered
 }
 
 func (s *SejmServer) chunkHTMLContent(htmlContent, documentTitle, chunkSizeStr, chunkNumberStr, showChunkInfo string) (*mcp.CallToolResult, error) {
