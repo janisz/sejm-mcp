@@ -19,7 +19,7 @@ func (s *SejmServer) registerSejmTools() {
 	s.registerBilateralGroupsTools()
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_terms",
-		Description: "Retrieve list of all parliamentary terms with their duration, dates, and status information. Returns comprehensive information about each Sejm term including start/end dates, current status, number of sittings, and key statistics. Essential for understanding the structure of Polish parliamentary history, analyzing legislative periods, and contextualizing political developments over time.",
+		Description: "Retrieve list of all parliamentary terms with their duration, dates, and status information. Returns comprehensive information about each Sejm term including start/end dates, current status, number of sittings, and key statistics. Each term represents a 4-year electoral cycle with distinct political compositions, coalition arrangements, and legislative priorities. Terms reflect Poland's democratic development: earlier terms show the transition from communist rule, while recent terms demonstrate established democratic institutions. Term boundaries determine committee structures, club formations, and MP relationships. Current Term 10 (2019-2023) represents contemporary Polish parliamentary dynamics with established party system and EU integration framework. Essential for understanding Polish parliamentary history, analyzing legislative periods, contextualizing political developments, and tracking democratic institution evolution over time.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 		},
@@ -27,7 +27,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_clubs",
-		Description: "Retrieve comprehensive list of parliamentary clubs (political parties and groups) for a specific term. Returns detailed information about each club including full names, membership counts, formation dates, logos, and current status. Parliamentary clubs represent the main political groupings in the Sejm and are essential for understanding political dynamics, coalition structures, voting patterns, and party representation.",
+		Description: "Retrieve comprehensive list of parliamentary clubs (kluby poselskie) and circles (koła poselskie) for a specific term. Returns detailed information about each political grouping including full names, membership counts, formation dates, logos, and current status. Clubs (minimum 15 MPs) receive proportional committee representation, allocated speaking time in debates, and stronger procedural rights compared to circles (minimum 3 MPs). These structures determine coalition formation, committee leadership distribution, and parliamentary influence patterns. Essential for understanding political dynamics, coalition structures, voting patterns, party discipline analysis, and the balance of power in the Sejm.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -60,7 +60,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_voting_details",
-		Description: "Get detailed information about a specific parliamentary voting including vote counts, MP-by-MP voting records, voting title, topic, date, and outcome. When PDF format is available, automatically converts to searchable text with page location mapping. Essential for analyzing voting patterns, party discipline, individual MP behavior, and understanding specific legislative decisions in detail.",
+		Description: "Get detailed information about a specific parliamentary voting including vote counts, MP-by-MP voting records, voting title, topic, date, and outcome. When PDF format is available, automatically converts to searchable text with page location mapping. Individual MP votes reveal party discipline patterns, coalition alignment, and potential cross-party cooperation. Analyzing vote-by-vote records can identify MPs who vote against party lines, abstain on controversial issues, or form temporary alliances across political divides. Essential for analyzing voting patterns, party discipline effectiveness, individual MP behavior, coalition stability assessment, and understanding specific legislative decisions that shaped Polish policy.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -194,7 +194,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_current_proceeding",
-		Description: "Retrieve information about the current active parliamentary proceeding (session). Returns details about the proceeding currently in progress or most recently concluded, including proceeding number, date, status, topics being discussed, and timing information. Essential for real-time parliamentary monitoring, understanding current legislative activity, tracking live debates, and staying updated on immediate parliamentary business.",
+		Description: "Retrieve information about the current active parliamentary proceeding (session). Returns details about the proceeding currently in progress or most recently concluded, including proceeding number, date, status, topics being discussed, and timing information. Parliamentary proceedings represent the main sessions where MPs gather for debates, voting, and official business following constitutional procedures. Sessions typically span multiple days with structured agendas covering legislative readings, government questions, committee reports, and formal votes. Current proceedings reflect ongoing political dynamics, coalition cooperation, and government-opposition interactions. Essential for real-time parliamentary monitoring, understanding current legislative activity, tracking live democratic processes, following political developments, and staying updated on immediate parliamentary business.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -209,7 +209,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_prints",
-		Description: "Retrieve parliamentary prints (legislative documents, bills, reports) for a specific term. Returns comprehensive information about each print including title, type, submitting MPs/institutions, submission date, current status in legislative process, and document details. Prints are the formal documents that contain proposed legislation, committee reports, government bills, and other official parliamentary documents. Critical for tracking legislative proposals, analyzing lawmaking process, and understanding the flow of political initiatives.",
+		Description: "Retrieve parliamentary prints (legislative documents, bills, reports) for a specific term. Returns comprehensive information about each print including title, type, submitting MPs/institutions, submission date, current status in legislative process, and document details. Prints represent the entry point of the legislative process, containing proposed legislation that will progress through defined stages: committee assignment and review → first reading (general debate) → second reading (detailed examination, amendments) → third reading (final passage) → Senate review (30-day period) → Presidential action (21-day period). Prints submitted by government often have higher passage rates than MP-initiated legislation. Committee reports attached to prints show detailed analysis, expert testimonies, and amendment recommendations. Critical for tracking legislative proposals, analyzing lawmaking process efficiency, understanding political initiative patterns, and monitoring the complete journey from legislative idea to enacted law.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -277,7 +277,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_mps",
-		Description: "Retrieve comprehensive list of Members of Parliament (MPs) for a specific parliamentary term. Returns detailed information about all MPs including their personal details, political party affiliation, electoral district, contact information, and current activity status. This tool is essential for political analysis, research on parliamentary composition, and understanding the current makeup of the Polish Parliament. Use this to identify MPs by party, region, or activity status, or to get a complete overview of parliamentary representation.",
+		Description: "Retrieve comprehensive list of Members of Parliament (MPs) for a specific parliamentary term. Returns detailed information about all MPs including their personal details, political party affiliation (kluby poselskie and koła poselskie), electoral district, contact information, and current activity status. MPs organize into parliamentary clubs (kluby - minimum 15 MPs) and circles (koła - minimum 3 MPs) that determine committee representation, speaking time, and political influence. Current Term 10 includes major clubs: PiS (190 MPs), KO (156 MPs), Polska2050-TD (32 MPs), PSL-TD (32 MPs), Lewica (26 MPs), and Konfederacja (18 MPs). Essential for political analysis, research on parliamentary composition, coalition dynamics, party discipline analysis, and understanding the current makeup of the Polish Parliament.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -291,7 +291,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_mp_details",
-		Description: "Get comprehensive biographical and political information about a specific Member of Parliament. Returns detailed profile including full name variations (for Polish grammar cases), birth information, education level, profession, electoral district details, political party membership, voting statistics, contact information, and current mandate status. Essential for creating MP profiles, analyzing individual political careers, verifying MP credentials, or researching specific politicians. Use this after getting MP list to drill down into individual MPs of interest.",
+		Description: "Get comprehensive biographical and political information about a specific Member of Parliament. Returns detailed profile including full name variations (for Polish grammar cases), birth information, education level, profession, electoral district details, political party membership (klub/koło affiliation), voting statistics, contact information, and current mandate status. Club membership determines committee assignments, leadership opportunities, speaking time allocation, and parliamentary influence. MP data includes relationships to committees, voting patterns that may reflect party discipline, bill authorship, and interpellation activity. Essential for creating MP profiles, analyzing individual political careers, understanding party dynamics, verifying MP credentials, or researching specific politicians and their political networks.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -310,7 +310,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_committees",
-		Description: "Retrieve complete list of parliamentary committees with their structure, membership, and operational details. Returns information about standing committees (permanent), extraordinary committees (special purpose), and investigative committees. Each committee entry includes its official name, code, appointed members with their roles (chairman, deputy chairman, secretary, regular member), scope of work, contact information, appointment dates, and any subcommittees. Critical for understanding parliamentary workflow, tracking which MPs work on which policy areas, analyzing committee composition by party, and identifying subject matter experts among MPs.",
+		Description: "Retrieve complete list of parliamentary committees with their structure, membership, and operational details. Returns information about standing committees (komisje stałe - permanent, 29 in Term 10), extraordinary committees (komisje nadzwyczajne - special purpose), and investigative committees (komisje śledcze - parliamentary inquiry bodies). Committee membership reflects proportional representation from parliamentary clubs, with leadership positions distributed based on political strength. Key committees include UST (Legislative - reviews all bills for legal consistency), FPB (Public Finance - budget oversight), SPC (Justice - legal system oversight), SUE (EU Affairs - European legislation). Each committee entry includes official name, code, appointed members with their roles, scope of work, and subcommittees. Critical for understanding parliamentary workflow, policy expertise distribution, and cross-party cooperation patterns.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -324,7 +324,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_committee_details",
-		Description: "Retrieve detailed information about a specific parliamentary committee. Returns comprehensive committee data including full name, description, scope of work, complete membership list with roles (chairman, deputy chairman, secretary, members), appointment dates, contact information, subcommittees, and current status. Essential for understanding committee structure, analyzing MP roles and responsibilities, researching policy expertise, and tracking committee composition changes.",
+		Description: "Retrieve detailed information about a specific parliamentary committee. Returns comprehensive committee data including full name, description, scope of work, complete membership list with roles (chairperson, deputy chairpersons from different parties for balance), appointment dates, contact information, subcommittees, and current status. Committee leadership structure reflects proportional representation and cross-party cooperation, with major clubs sharing leadership roles. Committee work often transcends party lines on technical issues, though political divisions may emerge on controversial topics. Essential for understanding committee structure, analyzing MP roles and responsibilities, researching policy expertise distribution, and tracking inter-party cooperation patterns.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -343,7 +343,7 @@ func (s *SejmServer) registerSejmTools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_search_votings",
-		Description: "Search and analyze parliamentary voting records with detailed vote counts and outcomes. Returns comprehensive voting data including vote title, topic, description, voting type (electronic/traditional/on list), date and time, sitting information, vote tallies (yes/no/abstain/not participating), majority type required, and whether the vote passed. Essential for political analysis, tracking MP voting patterns, analyzing party discipline, studying legislative success rates, measuring parliamentary attendance, and understanding decision-making processes. Use this to research specific legislation votes, analyze voting trends, or track controversial decisions.\n\nIMPORTANT: You must provide EITHER 'sitting' OR 'title' parameter (not both, not neither). Use 'sitting' to get all votes from a specific parliamentary session, or 'title' to search across multiple sessions for votes matching keywords.",
+		Description: "Search and analyze parliamentary voting records with detailed vote counts and outcomes. Returns comprehensive voting data including vote title, topic, description, voting type (electronic/traditional/on list), date and time, sitting information, vote tallies (yes/no/abstain/not participating), majority type required, and whether the vote passed. Voting patterns reveal party discipline, coalition dynamics, and cross-party cooperation on specific issues. Government-opposition divisions typically emerge on major legislation, while technical bills may see broader consensus. MP individual voting behavior can indicate party loyalty, personal convictions, or constituency pressures. Essential for political analysis, tracking coalition stability, analyzing party discipline, studying legislative success rates, measuring parliamentary attendance, understanding government-opposition dynamics, and identifying pivotal votes that shaped policy outcomes.\n\nIMPORTANT: You must provide EITHER 'sitting' OR 'title' parameter (not both, not neither). Use 'sitting' to get all votes from a specific parliamentary session, or 'title' to search across multiple sessions for votes matching keywords.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -3393,7 +3393,7 @@ func (s *SejmServer) handleGetWrittenQuestions(ctx context.Context, request mcp.
 func (s *SejmServer) registerProcessesTools() {
 	s.server.AddTool(mcp.Tool{
 		Name:        "sejm_get_processes",
-		Description: "Retrieve parliamentary legislative processes for a specific term. Returns comprehensive information about legislative procedures including bills, resolutions, and other legislative documents. Each process includes title, status, document type, dates, voting results, and detailed stages of the legislative procedure. Essential for tracking legislation through parliament, analyzing legislative progress, understanding voting patterns, and researching the complete lifecycle of parliamentary proposals from submission to final resolution.",
+		Description: "Retrieve parliamentary legislative processes for a specific term. Returns comprehensive information about legislative procedures including bills, resolutions, and other legislative documents progressing through the Polish parliamentary system. Each process tracks the complete legislative journey: print submission → committee assignment and review → first reading (general debate) → second reading (detailed examination with amendments) → third reading (final passage) → Senate review (30-day constitutional period) → Presidential decision (21-day period for signature or veto). Process data includes status at each stage, voting results, committee modifications, amendment history, and timeline analysis. Government-sponsored bills typically have higher success rates and faster processing compared to MP-initiated legislation. Essential for tracking legislation through parliament, analyzing legislative efficiency, understanding political success patterns, and researching the complete lifecycle of parliamentary proposals from initial submission to final enactment or rejection.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
