@@ -326,7 +326,7 @@ func (s *SejmServer) registerELITools() {
 
 	s.server.AddTool(mcp.Tool{
 		Name:        "eli_get_act_references",
-		Description: "Explore the complex legal relationship network between Polish legal acts through citations, amendments, repeals, and references. Returns comprehensive mapping following EU ELI standards with specific relationship types: eli:amends (substantial legal changes), eli:repeals (cancellation/replacement), eli:corrects (technical corrections), eli:consolidates (editorial compilation), eli:transposes (EU directive implementation), eli:ensuresImplementationOf (EU regulation compliance), and podstawa_prawna (legal authorization for secondary legislation). The system maintains bidirectional references with automatic updates when new acts are published. Constitutional amendments create amendment chains, while EU directives show implementation patterns through national law. Essential for legal dependency analysis, understanding legislative genealogy, tracking constitutional development, analyzing EU law integration, regulatory impact assessment, and building comprehensive legal knowledge graphs that reflect Poland's complex legal architecture.",
+		Description: "Explore the complex legal relationship network between Polish legal acts through citations, amendments, repeals, and references. Returns comprehensive mapping following EU ELI standards with specific relationship types: eli:amends (substantial legal changes), eli:repeals (cancellation/replacement), eli:corrects (technical corrections), eli:consolidates (editorial compilation), eli:transposes (EU directive implementation), eli:ensuresImplementationOf (EU regulation compliance), and podstawa_prawna (legal authorization for secondary legislation). The system maintains bidirectional references with automatic updates when new acts are published. Constitutional amendments create amendment chains, while EU directives show implementation patterns through national law. \n\n**PAGINATION SUPPORT**: Major laws like the Constitution have 3,519+ implementing regulations. Use pagination parameters to manage large datasets: limit (max 100 per category), offset (skip entries), and category filtering for focused analysis. Examples: limit='20' offset='0' for first 20 results, category='Akty wykonawcze' for implementing regulations only, offset='100' limit='50' for results 101-150. Essential for legal dependency analysis, understanding legislative genealogy, tracking constitutional development, analyzing EU law integration, regulatory impact assessment, and building comprehensive legal knowledge graphs that reflect Poland's complex legal architecture.",
 		InputSchema: mcp.ToolInputSchema{
 			Type: "object",
 			Properties: map[string]interface{}{
@@ -341,6 +341,18 @@ func (s *SejmServer) registerELITools() {
 				"position": map[string]interface{}{
 					"type":        "string",
 					"description": "Position number of the source act. This identifies the exact legal document whose legal relationships you want to explore. Major acts often have extensive reference networks showing their importance in the legal system.",
+				},
+				"limit": map[string]interface{}{
+					"type":        "string",
+					"description": "Maximum number of references to return per category (default: 10, max: 100). Use higher values for comprehensive legal analysis. For major laws like Constitution with 3,519+ references, pagination is essential.",
+				},
+				"offset": map[string]interface{}{
+					"type":        "string",
+					"description": "Number of references to skip per category for pagination (default: 0). Use with limit to browse through large reference networks. Example: offset='20' with limit='10' shows references 21-30 in each category.",
+				},
+				"category": map[string]interface{}{
+					"type":        "string",
+					"description": "Filter to specific reference category to focus analysis. Available categories: 'Akty wykonawcze' (implementing regulations), 'Akty zmieniające' (acts that amend this law), 'Akty uchylające' (acts that repeal this law), 'Akty uchylone' (acts repealed by this law), 'Akty zmieniane' (acts amended by this law), 'Akty podstawowe' (foundational acts this law is based on), 'Podstawa prawna' (legal authorization), 'Sprostowanie' (corrections), 'Akty uznane za uchylone' (acts deemed repealed). Leave empty to show all categories with pagination applied to each.",
 				},
 			},
 			Required: []string{"publisher", "year", "position"},
@@ -1179,6 +1191,21 @@ func (s *SejmServer) handleGetActReferences(ctx context.Context, request mcp.Cal
 		return mcp.NewToolResultError("All three parameters are required: publisher, year, and position. These identify the source legal act whose legal relationships you want to explore. Get these coordinates from eli_search_acts or legal citations."), nil
 	}
 
+	// Parse pagination parameters
+	limitStr := request.GetString("limit", "10")
+	offsetStr := request.GetString("offset", "0")
+	categoryFilter := request.GetString("category", "")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil || offset < 0 {
+		offset = 0
+	}
+
 	endpoint := fmt.Sprintf("%s/acts/%s/%s/%s/references", eliBaseURL, publisher, year, position)
 	apiData, err := s.makeAPIRequest(ctx, endpoint, nil)
 	if err != nil {
@@ -1190,17 +1217,36 @@ func (s *SejmServer) handleGetActReferences(ctx context.Context, request mcp.Cal
 		return mcp.NewToolResultError(fmt.Sprintf("Failed to parse legal references data from ELI API response: %v. The API may have returned unexpected data format.", err)), nil
 	}
 
+	// Apply category filtering if specified
+	if categoryFilter != "" {
+		if filteredRefs, exists := references[categoryFilter]; exists {
+			references = eli.CustomReferencesDetailsInfo{categoryFilter: filteredRefs}
+		} else {
+			availableCategories := make([]string, 0, len(references))
+			for category := range references {
+				availableCategories = append(availableCategories, category)
+			}
+			return mcp.NewToolResultError(fmt.Sprintf("Category '%s' not found. Available categories: %s", categoryFilter, strings.Join(availableCategories, ", "))), nil
+		}
+	}
+
 	// Analyze reference patterns by category
 	totalRefs := 0
+	totalAvailableRefs := 0
 	for _, refList := range references {
+		totalAvailableRefs += len(refList)
 		totalRefs += len(refList)
 	}
 
-	// Build summary information
+	// Build summary information with pagination details
 	var summary []string
 	summary = append(summary, fmt.Sprintf("Source Act: %s/%s/%s", publisher, year, position))
-	summary = append(summary, fmt.Sprintf("Total reference categories: %d", len(references)))
-	summary = append(summary, fmt.Sprintf("Total legal relationships found: %d", totalRefs))
+	if categoryFilter != "" {
+		summary = append(summary, fmt.Sprintf("Filtered Category: %s", categoryFilter))
+	}
+	summary = append(summary, fmt.Sprintf("Reference categories shown: %d", len(references)))
+	summary = append(summary, fmt.Sprintf("Total references found: %d", totalAvailableRefs))
+	summary = append(summary, fmt.Sprintf("Pagination: showing %d references per category (offset: %d, limit: %d)", limit, offset, limit))
 
 	if totalRefs == 0 {
 		response := StandardResponse{
@@ -1233,16 +1279,26 @@ func (s *SejmServer) handleGetActReferences(ctx context.Context, request mcp.Cal
 		"Akty wykonawcze":  "Implementing regulations for this law",
 	}
 
-	// Show priority categories first with navigation hints
+	// Apply pagination to each category and show results
 	for category, description := range priorityCategories {
 		if refList, exists := references[category]; exists && len(refList) > 0 {
-			data = append(data, fmt.Sprintf("• %s: %d references (%s)", category, len(refList), description))
+			// Apply pagination to this category
+			totalInCategory := len(refList)
+			start := offset
+			end := offset + limit
+			if start >= totalInCategory {
+				continue // Skip this category if offset is beyond available data
+			}
+			if end > totalInCategory {
+				end = totalInCategory
+			}
 
-			// Add specific navigation examples
-			for i, ref := range refList {
-				if i >= 2 { // Show only first 2 per category
-					break
-				}
+			paginatedRefs := refList[start:end]
+			data = append(data, fmt.Sprintf("• %s: showing %d-%d of %d total references (%s)",
+				category, start+1, end, totalInCategory, description))
+
+			// Show paginated results
+			for i, ref := range paginatedRefs {
 				if ref.Act != nil && ref.Act.Title != nil {
 					// Extract coordinates for navigation
 					actPublisher := "Unknown"
@@ -1259,24 +1315,73 @@ func (s *SejmServer) handleGetActReferences(ctx context.Context, request mcp.Cal
 						actPos = fmt.Sprintf("%d", *ref.Act.Pos)
 					}
 
-					data = append(data, fmt.Sprintf("  → %s (%s/%s/%s)", *ref.Act.Title, actPublisher, actYear, actPos))
+					data = append(data, fmt.Sprintf("  %d. %s (%s/%s/%s)", start+i+1, *ref.Act.Title, actPublisher, actYear, actPos))
 
-					// Add to next actions with specific navigation commands
-					nextActions = append(nextActions, fmt.Sprintf("Explore '%s': eli_get_act_details with publisher='%s', year='%s', position='%s'", *ref.Act.Title, actPublisher, actYear, actPos))
+					// Add navigation examples for first few results to avoid overwhelming next actions
+					if len(nextActions) < 5 {
+						nextActions = append(nextActions, fmt.Sprintf("Explore '%s': eli_get_act_details with publisher='%s', year='%s', position='%s'", *ref.Act.Title, actPublisher, actYear, actPos))
+					}
 				}
 			}
 
-			if len(refList) > 2 {
-				data = append(data, fmt.Sprintf("  ... and %d more in this category", len(refList)-2))
+			// Add pagination hints
+			if totalInCategory > end {
+				remaining := totalInCategory - end
+				data = append(data, fmt.Sprintf("  ... %d more references available (use offset=%d to continue)", remaining, end))
 			}
 			data = append(data, "") // Add spacing
 		}
 	}
 
-	// Show remaining categories
+	// Show remaining categories with pagination
 	for category, refList := range references {
 		if _, isPriority := priorityCategories[category]; !isPriority && len(refList) > 0 {
-			data = append(data, fmt.Sprintf("• %s: %d references", category, len(refList)))
+			totalInCategory := len(refList)
+			if offset < totalInCategory {
+				start := offset
+				end := offset + limit
+				if end > totalInCategory {
+					end = totalInCategory
+				}
+				data = append(data, fmt.Sprintf("• %s: showing %d-%d of %d total references", category, start+1, end, totalInCategory))
+
+				if totalInCategory > end {
+					remaining := totalInCategory - end
+					data = append(data, fmt.Sprintf("  ... %d more available (use category='%s' with offset=%d)", remaining, category, end))
+				}
+			} else {
+				data = append(data, fmt.Sprintf("• %s: %d total references (use offset=0 to view)", category, totalInCategory))
+			}
+		}
+	}
+
+	// Add pagination navigation actions
+	if offset > 0 {
+		prevOffset := offset - limit
+		if prevOffset < 0 {
+			prevOffset = 0
+		}
+		if categoryFilter != "" {
+			nextActions = append(nextActions, fmt.Sprintf("Previous page: eli_get_act_references with publisher='%s', year='%s', position='%s', category='%s', offset='%d', limit='%d'", publisher, year, position, categoryFilter, prevOffset, limit))
+		} else {
+			nextActions = append(nextActions, fmt.Sprintf("Previous page: eli_get_act_references with publisher='%s', year='%s', position='%s', offset='%d', limit='%d'", publisher, year, position, prevOffset, limit))
+		}
+	}
+
+	hasMoreResults := false
+	for _, refList := range references {
+		if len(refList) > offset+limit {
+			hasMoreResults = true
+			break
+		}
+	}
+
+	if hasMoreResults {
+		nextOffset := offset + limit
+		if categoryFilter != "" {
+			nextActions = append(nextActions, fmt.Sprintf("Next page: eli_get_act_references with publisher='%s', year='%s', position='%s', category='%s', offset='%d', limit='%d'", publisher, year, position, categoryFilter, nextOffset, limit))
+		} else {
+			nextActions = append(nextActions, fmt.Sprintf("Next page: eli_get_act_references with publisher='%s', year='%s', position='%s', offset='%d', limit='%d'", publisher, year, position, nextOffset, limit))
 		}
 	}
 
@@ -1284,6 +1389,7 @@ func (s *SejmServer) handleGetActReferences(ctx context.Context, request mcp.Cal
 	nextActions = append(nextActions,
 		fmt.Sprintf("Get full details of this act: eli_get_act_details with publisher='%s', year='%s', position='%s'", publisher, year, position),
 		fmt.Sprintf("Download text of this act: eli_get_act_text with publisher='%s', year='%s', position='%s'", publisher, year, position),
+		"Focus on specific category: use category parameter (e.g., category='Akty wykonawcze')",
 		"Search for acts by similar topics: eli_search_acts with relevant keywords",
 	)
 
