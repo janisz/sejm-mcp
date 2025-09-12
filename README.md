@@ -103,6 +103,16 @@ For Claude Desktop, add to your `claude_desktop_config.json`:
 }
 ```
 
+#### Codex Configuration
+
+For Codex, add to your `.codex/config.toml`:
+
+```toml
+[mcp_servers.sejm_mcp]
+command = "docker"
+args = [ "run", "-i", "--rm", "ghcr.io/janisz/sejm-mcp:latest" ]
+```
+
 #### Local Binary Usage
 
 If you prefer to build and run locally:
