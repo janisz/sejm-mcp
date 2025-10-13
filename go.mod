@@ -8,7 +8,7 @@ require (
 	github.com/alexshin/httpcache v0.0.0-20230821155949-55fd53e8dede
 	github.com/gen2brain/go-fitz v1.24.15
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/mark3labs/mcp-go v0.41.0
+	github.com/mark3labs/mcp-go v0.41.1
 	github.com/oapi-codegen/runtime v1.1.2
 )
 
