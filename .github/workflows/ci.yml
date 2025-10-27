@@ -84,7 +84,7 @@ jobs:
         ./sejm-mcp --help
 
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: sejm-mcp-binary
         path: ./sejm-mcp
