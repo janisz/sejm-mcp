@@ -57,7 +57,7 @@ jobs:
       uses: actions/setup-go@v6
 
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v8
+      uses: golangci/golangci-lint-action@v9
       with:
         version: latest
 
@@ -84,7 +84,7 @@ jobs:
         ./sejm-mcp --help
 
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: sejm-mcp-binary
         path: ./sejm-mcp
