@@ -18,7 +18,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v6
@@ -51,13 +51,13 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v6
 
     - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v8
+      uses: golangci/golangci-lint-action@v9
       with:
         version: latest
 
@@ -68,7 +68,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v6
@@ -84,7 +84,7 @@ jobs:
         ./sejm-mcp --help
 
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: sejm-mcp-binary
         path: ./sejm-mcp
@@ -101,7 +101,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -144,7 +144,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Set up Go
       uses: actions/setup-go@v6
@@ -188,7 +188,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
 
     - name: Check API connectivity
       run: make check-apis
