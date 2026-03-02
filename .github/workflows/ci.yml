@@ -84,7 +84,7 @@ jobs:
         ./sejm-mcp --help
 
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: sejm-mcp-binary
         path: ./sejm-mcp
@@ -125,7 +125,7 @@ jobs:
       uses: anchore/sbom-action/download-syft@v0
 
     - name: Run GoReleaser
-      uses: goreleaser/goreleaser-action@v6
+      uses: goreleaser/goreleaser-action@v7
       with:
         distribution: goreleaser
         version: '~> v2'
