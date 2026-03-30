@@ -37,7 +37,7 @@ jobs:
         go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         file: ./coverage.out
@@ -84,7 +84,7 @@ jobs:
         ./sejm-mcp --help
 
     - name: Upload binary artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: sejm-mcp-binary
         path: ./sejm-mcp
@@ -109,10 +109,10 @@ jobs:
       uses: actions/setup-go@v6
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v4
 
     - name: Log in to Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
@@ -125,7 +125,7 @@ jobs:
       uses: anchore/sbom-action/download-syft@v0
 
     - name: Run GoReleaser
-      uses: goreleaser/goreleaser-action@v6
+      uses: goreleaser/goreleaser-action@v7
       with:
         distribution: goreleaser
         version: '~> v2'
